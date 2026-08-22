@@ -20,11 +20,15 @@ for (const file of files) {
   if (!slug) { errors.push(`${file}: slug ausente`); continue; }
   if (seen.has(slug)) { errors.push(`${file}: slug duplicado ${slug}`); continue; }
   seen.add(slug);
-  const serialized = JSON.stringify(article);
-  if (/Ã.|Â.|â€|�/.test(serialized)) {
-    warnings.push(`${file}: possível mojibake; artigo excluído do índice até correção`);
+
+  // Metadados legados `cat`/`kw` de execuções antigas podem conter mojibake sem afetar
+  // o conteúdo exibido. A quarentena considera somente conteúdo publicável.
+  const publishable = JSON.stringify({ pt: article.pt, en: article.en, es: article.es, social: article.social });
+  if (/Ã.|Â.|â€|�/.test(publishable)) {
+    warnings.push(`${file}: conteúdo publicável com possível mojibake; artigo excluído do índice até correção`);
     continue;
   }
+
   const bodyHtml = String(pt.bodyHtml || pt.body || '').trim();
   if (!pt.title || !pt.excerpt || !bodyHtml) { errors.push(`${file}: campos PT obrigatórios ausentes`); continue; }
   const locale = (code) => {
@@ -33,7 +37,7 @@ for (const file of files) {
       title: source.title || pt.title,
       slug,
       excerpt: source.excerpt || pt.excerpt,
-      category: source.category || pt.category || article.cat || '',
+      category: source.category || pt.category || '',
       readingTime: source.readingTime || pt.readingTime || '',
       metaDescription: source.metaDescription || source.excerpt || pt.metaDescription || pt.excerpt,
       keywords: Array.isArray(source.keywords) ? source.keywords : [],
@@ -45,7 +49,7 @@ for (const file of files) {
     date: article.date || null,
     title: pt.title,
     excerpt: pt.excerpt,
-    category: pt.category || article.cat || '',
+    category: pt.category || '',
     readingTime: pt.readingTime || '',
     metaDescription: pt.metaDescription || pt.excerpt,
     keywords: Array.isArray(pt.keywords) ? pt.keywords : [],
