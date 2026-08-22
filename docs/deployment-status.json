@@ -1,8 +1,12 @@
 {
-  "checkedAt": "2026-08-22T11:32:52Z",
-  "sourceCommit": "6f426925de0bdfbb2cb9049cd6682127de7725c4",
+  "checkedAt": "2026-08-22T12:18:29Z",
+  "sourceCommit": "3644cfbea1e70d65a03833d59853e4d863a76ecf",
   "cloudflareSecretsConfigured": "false",
+  "crmD1Provision": "skipped",
+  "crmD1DatabaseId": "",
   "contentWorkerDeploy": "skipped",
   "attendantWorkerDeploy": "skipped",
-  "publicHealthSmokeTest": "skipped"
+  "publicHealthSmokeTest": "skipped",
+  "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev",
+  "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev"
 }
