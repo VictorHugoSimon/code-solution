@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'robo/**'
+      - 'crm/migrations/**'
       - '.github/workflows/deploy-workers.yml'
   workflow_dispatch:
 
@@ -37,6 +38,51 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Provision CRM D1 and apply schema
+        id: d1
+        if: steps.cf.outputs.configured == 'true'
+        continue-on-error: true
+        working-directory: robo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 list --json > /tmp/d1-list.json
+          DB_ID=$(node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const list = Array.isArray(data) ? data : (data.result || data.databases || []);
+          const db = list.find(x => x.name === 'code-solution-crm');
+          process.stdout.write(db?.uuid || db?.id || '');
+          NODE
+          )
+          if [ -z "$DB_ID" ]; then
+            echo "Creating D1 database code-solution-crm"
+            npx wrangler@4 d1 create code-solution-crm
+            npx wrangler@4 d1 list --json > /tmp/d1-list.json
+            DB_ID=$(node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const list = Array.isArray(data) ? data : (data.result || data.databases || []);
+          const db = list.find(x => x.name === 'code-solution-crm');
+          if (!db) process.exit(2);
+          process.stdout.write(db.uuid || db.id || '');
+          NODE
+            )
+          fi
+          test -n "$DB_ID"
+          echo "database_id=$DB_ID" >> "$GITHUB_OUTPUT"
+          npx wrangler@4 d1 execute code-solution-crm --remote --file=../crm/migrations/0001_init.sql --yes
+          cp wrangler-atendente.toml wrangler-atendente.deploy.toml
+          cat >> wrangler-atendente.deploy.toml <<EOF
+
+          [[d1_databases]]
+          binding = "CRM_DB"
+          database_name = "code-solution-crm"
+          database_id = "$DB_ID"
+          EOF
+
       - name: Deploy content worker
         id: deploy_content
         if: steps.cf.outputs.configured == 'true'
@@ -47,32 +93,38 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler.toml
 
-      - name: Deploy attendant worker
+      - name: Deploy attendant worker with D1
         id: deploy_attendant
-        if: steps.cf.outputs.configured == 'true'
+        if: steps.cf.outputs.configured == 'true' && steps.d1.outcome == 'success'
         continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4 deploy --config wrangler-atendente.toml
+        run: npx wrangler@4 deploy --config wrangler-atendente.deploy.toml
 
       - name: Smoke test public workers
         id: smoke
         if: steps.cf.outputs.configured == 'true' && steps.deploy_content.outcome == 'success' && steps.deploy_attendant.outcome == 'success'
         continue-on-error: true
         run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health
+          set -e
+          sleep 5
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health > /tmp/content-health.json
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health > /tmp/attendant-health.json
+          cat /tmp/content-health.json
           echo
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health
+          cat /tmp/attendant-health.json
           echo
+          grep -q 'commercial-engine-2026-08-22.2' /tmp/content-health.json
+          grep -q '"service":"code-solution-atendente"' /tmp/attendant-health.json
 
       - name: Persist deployment status
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
+          D1_OUTCOME: ${{ steps.d1.outcome }}
+          D1_ID: ${{ steps.d1.outputs.database_id }}
           CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
           ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
@@ -83,18 +135,20 @@ jobs:
           {
             "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "sourceCommit": "$COMMIT_SHA",
-            "cloudflareSecretsConfigured": "$CONFIGURED",
-            "contentWorkerDeploy": "$CONTENT_OUTCOME",
-            "attendantWorkerDeploy": "$ATTENDANT_OUTCOME",
-            "publicHealthSmokeTest": "$SMOKE_OUTCOME"
+            "cloudflareSecretsConfigured": "${CONFIGURED:-false}",
+            "crmD1Provision": "${D1_OUTCOME:-skipped}",
+            "crmD1DatabaseId": "$D1_ID",
+            "contentWorkerDeploy": "${CONTENT_OUTCOME:-skipped}",
+            "attendantWorkerDeploy": "${ATTENDANT_OUTCOME:-skipped}",
+            "publicHealthSmokeTest": "${SMOKE_OUTCOME:-skipped}",
+            "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev",
+            "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev"
           }
           EOF
           git config user.name "Code Solution Deploy Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/deployment-status.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: record worker deployment status"
           git pull --rebase origin main
           git push origin HEAD:main
@@ -103,6 +157,7 @@ jobs:
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
+          D1_OUTCOME: ${{ steps.d1.outcome }}
           CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
           ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
@@ -111,7 +166,7 @@ jobs:
             echo "Cloudflare credentials are not configured in GitHub Actions."
             exit 1
           fi
-          if [ "$CONTENT_OUTCOME" != "success" ] || [ "$ATTENDANT_OUTCOME" != "success" ] || [ "$SMOKE_OUTCOME" != "success" ]; then
-            echo "Worker deployment or smoke test failed."
+          if [ "$D1_OUTCOME" != "success" ] || [ "$CONTENT_OUTCOME" != "success" ] || [ "$ATTENDANT_OUTCOME" != "success" ] || [ "$SMOKE_OUTCOME" != "success" ]; then
+            echo "D1 provisioning, Worker deployment or smoke test failed."
             exit 1
           fi
