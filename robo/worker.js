@@ -58,9 +58,6 @@ async function runPipeline(env, ctx, meta) {
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
     .slice(0, 250);
   await putGithubJson(env, 'content/blog/index.json', nextIndex, `robô: atualiza índice com ${article.slug}`);
-  if (env.GOOGLE_SA_EMAIL && env.GOOGLE_SA_KEY) {
-    ctx.waitUntil(requestGoogleIndexing(env, article.slug).catch((error) => console.warn('indexing skipped', cleanError(error))));
-  }
   return { trigger: meta.trigger, slug: article.pt.slug || article.slug, category: article.pt.category, date: article.date };
 }
 
@@ -170,30 +167,6 @@ function githubHeaders(env) {
   return { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'CodeSolutionContentBot' };
 }
 
-async function requestGoogleIndexing(env, slug) {
-  const token = await googleAccessToken(env);
-  for (const lang of ['', 'en/', 'es/']) {
-    const url = `https://www.codesolution.com.br/${lang}blog/${slug}/`.replace(/([^:]\/)\/+/, '$1');
-    const response = await fetch('https://indexing.googleapis.com/v3/urlNotifications:publish', {
-      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ url, type: 'URL_UPDATED' }),
-    });
-    if (!response.ok) throw new Error(`Google indexing ${response.status}`);
-  }
-}
-
-async function googleAccessToken(env) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-  const claim = b64url(JSON.stringify({ iss: env.GOOGLE_SA_EMAIL, scope: 'https://www.googleapis.com/auth/indexing', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3500 }));
-  const key = await crypto.subtle.importKey('pkcs8', pemToArrayBuffer(env.GOOGLE_SA_KEY), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${header}.${claim}`));
-  const assertion = `${header}.${claim}.${b64url(new Uint8Array(signature))}`;
-  const body = new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion });
-  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-  if (!response.ok) throw new Error(`Google token ${response.status}`);
-  return (await response.json()).access_token;
-}
-
 function normalizeSocial(social = {}) {
   const out = {};
   for (const network of ['linkedin', 'instagram', 'facebook']) {
@@ -213,5 +186,3 @@ function json(value, status = 200) { return new Response(JSON.stringify(value), 
 function safeEqual(a, b) { if (!a || !b || a.length !== b.length) return false; let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i); return diff === 0; }
 function encodeBase64Utf8(value) { const bytes = new TextEncoder().encode(value); let binary = ''; for (const b of bytes) binary += String.fromCharCode(b); return btoa(binary); }
 function decodeBase64Utf8(value) { const binary = atob(String(value).replace(/\n/g, '')); const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
-function b64url(value) { const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value; let binary=''; for (const b of bytes) binary += String.fromCharCode(b); return btoa(binary).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); }
-function pemToArrayBuffer(pem) { const clean = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s+/g, ''); const bin = atob(clean); return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer; }
