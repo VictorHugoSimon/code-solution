@@ -1,6 +1,7 @@
 {
-  "checkedAt": "2026-08-22T11:36:05Z",
-  "sourceCommit": "5e7be31df9b7695b1bb5cc4a902dd48c3212dec6",
+  "checkedAt": "2026-08-22T11:36:28Z",
+  "sourceCommit": "8349e39cbc93ae9f5daff3f08f3dc64631d17d3a",
   "workerSyntax": "success",
-  "blogIndexBuild": "success"
+  "blogIndexBuild": "success",
+  "staticBlogBuild": "success"
 }
