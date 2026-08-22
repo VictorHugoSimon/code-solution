@@ -1,10 +1,13 @@
 {
-  "checkedAt": "2026-08-22T12:17:26Z",
-  "sourceCommit": "59b25d812121dfc9b4f30a43de9200561caece91",
+  "checkedAt": "2026-08-22T12:19:06Z",
+  "sourceCommit": "4589c1b8a1581f9d3c1c607fd42f87ef35011e2e",
   "home": "success",
   "staticArticle": "failed",
   "contentWorkerHealth": "success",
   "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health",
+  "contentWorkerBuild": "",
+  "contentWorkerReady": "",
   "attendantWorkerHealth": "success",
-  "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health"
+  "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health",
+  "attendantStorage": ""
 }
