@@ -1,7 +1,8 @@
 {
-  "checkedAt": "2026-08-22T12:32:46Z",
-  "sourceCommit": "8a327b127dc18e7e3a105f463546f1f76d0eff4b",
+  "checkedAt": "2026-08-22T12:33:02Z",
+  "sourceCommit": "e858afdbb9c205e10deea35310716f03c78d0d24",
   "workerSyntax": "success",
+  "crmSchema": "success",
   "blogIndexBuild": "success",
   "staticBlogBuild": "success",
   "pagesPreparation": "success"
