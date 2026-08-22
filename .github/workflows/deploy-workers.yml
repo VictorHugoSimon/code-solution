@@ -9,16 +9,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: deploy-workers-production
+  cancel-in-progress: true
 
 jobs:
-  deploy-content-worker:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Validate Cloudflare credentials
         id: cf
         env:
@@ -27,41 +32,86 @@ jobs:
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare GitHub secrets ausentes; deploy automático ignorado."
+            echo "::warning::Cloudflare GitHub secrets ausentes; deploy automático não executado."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+
       - name: Deploy content worker
+        id: deploy_content
         if: steps.cf.outputs.configured == 'true'
+        continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler.toml
 
-  deploy-attendant-worker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Validate Cloudflare credentials
-        id: cf
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare GitHub secrets ausentes; deploy automático ignorado."
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
       - name: Deploy attendant worker
+        id: deploy_attendant
         if: steps.cf.outputs.configured == 'true'
+        continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler-atendente.toml
+
+      - name: Smoke test public workers
+        id: smoke
+        if: steps.cf.outputs.configured == 'true' && steps.deploy_content.outcome == 'success' && steps.deploy_attendant.outcome == 'success'
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health
+          echo
+
+      - name: Persist deployment status
+        if: always()
+        env:
+          CONFIGURED: ${{ steps.cf.outputs.configured }}
+          CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
+          ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          cat > docs/deployment-status.json <<EOF
+          {
+            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sourceCommit": "$COMMIT_SHA",
+            "cloudflareSecretsConfigured": "$CONFIGURED",
+            "contentWorkerDeploy": "$CONTENT_OUTCOME",
+            "attendantWorkerDeploy": "$ATTENDANT_OUTCOME",
+            "publicHealthSmokeTest": "$SMOKE_OUTCOME"
+          }
+          EOF
+          git config user.name "Code Solution Deploy Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/deployment-status.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: record worker deployment status"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce deployment result
+        if: always()
+        env:
+          CONFIGURED: ${{ steps.cf.outputs.configured }}
+          CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
+          ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          if [ "$CONFIGURED" != "true" ]; then
+            echo "Cloudflare credentials are not configured in GitHub Actions."
+            exit 1
+          fi
+          if [ "$CONTENT_OUTCOME" != "success" ] || [ "$ATTENDANT_OUTCOME" != "success" ] || [ "$SMOKE_OUTCOME" != "success" ]; then
+            echo "Worker deployment or smoke test failed."
+            exit 1
+          fi
