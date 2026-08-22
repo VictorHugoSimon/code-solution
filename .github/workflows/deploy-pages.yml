@@ -21,6 +21,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,12 +29,18 @@ jobs:
           node-version: 22
 
       - name: Build deploy bundle
+        id: build
+        continue-on-error: true
         run: |
           npm run blog:index
           npm run blog:static
+          test -f deploy/index.html
+          test -f deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
+          grep -q 'BlogPosting' deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
 
       - name: Validate Cloudflare credentials
         id: cf
+        if: steps.build.outcome == 'success'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -47,7 +54,7 @@ jobs:
 
       - name: Deploy Pages
         id: pages
-        if: steps.cf.outputs.configured == 'true'
+        if: steps.build.outcome == 'success' && steps.cf.outputs.configured == 'true'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -71,6 +78,7 @@ jobs:
       - name: Persist Pages deployment status
         if: always()
         env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
           CONFIGURED: ${{ steps.cf.outputs.configured }}
           PAGES_OUTCOME: ${{ steps.pages.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
@@ -81,6 +89,7 @@ jobs:
           {
             "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "sourceCommit": "$SOURCE_SHA",
+            "build": "${BUILD_OUTCOME:-skipped}",
             "cloudflareSecretsConfigured": "${CONFIGURED:-false}",
             "pagesDeploy": "${PAGES_OUTCOME:-skipped}",
             "publicSmokeTest": "${SMOKE_OUTCOME:-skipped}",
@@ -95,11 +104,16 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Enforce deploy when configured
-        if: always() && steps.cf.outputs.configured == 'true'
+      - name: Enforce build and deployment
+        if: always()
         env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          CONFIGURED: ${{ steps.cf.outputs.configured }}
           PAGES_OUTCOME: ${{ steps.pages.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
-          test "$PAGES_OUTCOME" = "success"
-          test "$SMOKE_OUTCOME" = "success"
+          test "$BUILD_OUTCOME" = "success"
+          if [ "$CONFIGURED" = "true" ]; then
+            test "$PAGES_OUTCOME" = "success"
+            test "$SMOKE_OUTCOME" = "success"
+          fi
