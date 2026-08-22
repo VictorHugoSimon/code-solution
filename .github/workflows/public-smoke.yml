@@ -28,14 +28,27 @@ jobs:
         run: |
           set +e
           home=failed; article=failed; robo=failed; attendant=failed
+          robo_url=""; attendant_url=""
+
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html && grep -qi 'Cibersegurança e LGPD' /tmp/article.html && article=success
-          curl -L --fail --silent --show-error --max-time 20 https://code-solution-robo.victorhugo1612.workers.dev/health >/tmp/robo.json && robo=success
-          curl -L --fail --silent --show-error --max-time 20 https://code-solution-atendente.victorhugo1612.workers.dev/health >/tmp/atendente.json && attendant=success
+
+          for base in victorhugo1612 victorhugoteixeirasimon6; do
+            url="https://code-solution-robo.${base}.workers.dev/health"
+            if curl -L --fail --silent --show-error --max-time 20 "$url" >/tmp/robo.json; then robo=success; robo_url="$url"; break; fi
+          done
+
+          for base in victorhugo1612 victorhugoteixeirasimon6; do
+            url="https://code-solution-atendente.${base}.workers.dev/health"
+            if curl -L --fail --silent --show-error --max-time 20 "$url" >/tmp/atendente.json; then attendant=success; attendant_url="$url"; break; fi
+          done
+
           echo "home=$home" >> "$GITHUB_OUTPUT"
           echo "article=$article" >> "$GITHUB_OUTPUT"
           echo "robo=$robo" >> "$GITHUB_OUTPUT"
           echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
+          echo "robo_url=$robo_url" >> "$GITHUB_OUTPUT"
+          echo "attendant_url=$attendant_url" >> "$GITHUB_OUTPUT"
 
       - name: Persist public status
         if: always()
@@ -44,6 +57,8 @@ jobs:
           ARTICLE: ${{ steps.check.outputs.article }}
           ROBO: ${{ steps.check.outputs.robo }}
           ATTENDANT: ${{ steps.check.outputs.attendant }}
+          ROBO_URL: ${{ steps.check.outputs.robo_url }}
+          ATTENDANT_URL: ${{ steps.check.outputs.attendant_url }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
@@ -54,7 +69,9 @@ jobs:
             "home": "${HOME:-failed}",
             "staticArticle": "${ARTICLE:-failed}",
             "contentWorkerHealth": "${ROBO:-failed}",
-            "attendantWorkerHealth": "${ATTENDANT:-failed}"
+            "contentWorkerUrl": "$ROBO_URL",
+            "attendantWorkerHealth": "${ATTENDANT:-failed}",
+            "attendantWorkerUrl": "$ATTENDANT_URL"
           }
           EOF
           git config user.name "Code Solution Smoke Bot"
