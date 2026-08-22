@@ -1,0 +1,46 @@
+name: Remove unsupported Google Indexing API usage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-unsupported-indexing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove general-content Indexing API calls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('robo/worker.js')
+          s = p.read_text(encoding='utf-8')
+          original = s
+          s = re.sub(r"\n\s*if \(env\.GOOGLE_SA_EMAIL && env\.GOOGLE_SA_KEY\) \{\s*ctx\.waitUntil\(requestGoogleIndexing\(env, article\.slug\)\.catch\(\(error\) => console\.warn\('indexing skipped', cleanError\(error\)\)\)\);\s*\}", "", s, flags=re.S)
+          s = re.sub(r"\nasync function requestGoogleIndexing\(env, slug\) \{[\s\S]*?\nfunction normalizeSocial", "\nfunction normalizeSocial", s)
+          s = re.sub(r"\nfunction b64url\(value\) \{[^\n]*\}\s*\nfunction pemToArrayBuffer\(pem\) \{[^\n]*\}\s*", "\n", s)
+          if 'requestGoogleIndexing(' in s or 'indexing.googleapis.com' in s:
+              raise SystemExit('Unsupported indexing code still present after patch')
+          if s == original:
+              print('No unsupported indexing code found')
+          else:
+              p.write_text(s, encoding='utf-8')
+              print('worker.js patched')
+          PY
+          node --check robo/worker.js
+      - name: Commit correction
+        run: |
+          git config user.name "Code Solution Compliance Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add robo/worker.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: use sitemap instead of unsupported Indexing API for blog"
+          git pull --rebase origin main
+          git push origin HEAD:main
