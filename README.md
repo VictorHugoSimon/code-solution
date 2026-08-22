@@ -1,66 +1,72 @@
-# Code Solution — Automação, Conteúdo e CRM
+# Code Solution — automação, conteúdo, atendimento e CRM
 
-Este repositório é a fonte versionada das automações comerciais da Code Solution.
+Este repositório é a fonte versionada da operação digital da Code Solution.
 
-## Componentes
+## Estado atual
 
-- `content/blog/` — artigos produzidos pelo robô e `index.json` consumido pelo blog.
-- `robo/worker.js` — geração de conteúdo via Groq + publicação no GitHub.
-- `robo/atendente-worker.js` — Codi, captura de leads e API do CRM.
-- `deploy/painel/crm/` — painel Kanban comercial estático.
-- `scripts/rebuild-blog-index.mjs` — validação, quarentena de encoding e reconstrução do índice.
-- `.github/workflows/` — integridade de conteúdo e deploy automático dos Workers.
+### Código e build
+- pipeline de conteúdo com validação e geração do `content/blog/index.json`;
+- blog estático multilíngue (PT/EN/ES) com canonical, hreflang, `BlogPosting` e sitemap;
+- preparação SEO/AEO da Home, Serviços e Blog;
+- landing `/diagnostico/` com score local 0–100 e CTA para WhatsApp, sem armazenamento de respostas;
+- assistente standalone `/assistente/` apontando para o Worker de atendimento;
+- CRM Kanban em `/painel/crm/` com 12 etapas, Lead Score, timeline, responsável, próxima ação, vencimento, valor, previsão e motivo de perda;
+- schema D1 em `crm/migrations/0001_init.sql`;
+- deploy Workers capaz de provisionar D1, aplicar schema, publicar e executar smoke test;
+- deploy Pages capaz de construir, preparar SEO/AEO, publicar e executar smoke test;
+- smoke público persistido em `docs/public-smoke-status.json`.
 
-## Pipeline de conteúdo
+### Produção observada
+- `https://www.codesolution.com.br/` responde;
+- os Workers públicos respondem no subdomínio `victorhugoteixeirasimon6.workers.dev`;
+- as versões públicas dos Workers são anteriores ao build atual do repositório;
+- as novas rotas estáticas ainda dependem do próximo deploy do Cloudflare Pages.
 
-1. Cron do Worker roda terça e sexta às 12:00 UTC.
-2. A categoria menos recentemente publicada é escolhida.
-3. Groq gera PT-BR + EN + ES em JSON.
-4. O Worker valida HTML, tamanho, encoding e slug.
-5. O artigo é criado em `content/blog/<slug>.json` sem sobrescrever arquivos existentes.
-6. `content/blog/index.json` é atualizado.
-7. O GitHub Action também reconstrói o índice a partir dos arquivos como mecanismo de recuperação.
+### Bloqueio de deploy do GitHub Actions
+O repositório precisa dos secrets:
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
 
-## CRM
+Nunca coloque esses valores em commit, issue ou arquivo versionado.
 
-Pipeline padrão: `novo → qualificacao → contato_realizado → discovery → avaliacao_tecnica → proposta → negociacao → follow_up → ganho/perdido → nutricao/arquivado`.
+Depois que ambos existirem, os workflows de Pages e Workers executam a automação de publicação. O workflow de Workers também cria/localiza `code-solution-crm`, aplica a migration e injeta o binding D1 no deploy do atendente.
 
-O endpoint público `/lead` valida nome, WhatsApp e necessidade, calcula Lead Score (0–100), define temperatura e grava no KV. Endpoints `/crm/*` exigem `CRM_ADMIN_KEY`.
+## Runtime secrets esperados no Cloudflare
 
-## Secrets
-
-Nunca versionar valores de segredo.
-
-### Worker de conteúdo
+### `code-solution-robo`
 - `AI_API_KEY`
 - `GITHUB_TOKEN`
-- `MANUAL_KEY`
-- opcionais: `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`, `GOOGLE_INDEXING_WEBHOOK`
+- `MANUAL_KEY` (para `/run` manual)
+- opcionais para Indexing API: `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`
 
-### Worker de atendimento
+### `code-solution-atendente`
 - `AI_API_KEY`
 - `CRM_ADMIN_KEY`
-- opcionais para WhatsApp: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `OWNER_WHATSAPP`
+- opcionais para notificação WhatsApp: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `OWNER_WHATSAPP`
 
-### GitHub Actions
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+## URLs operacionais
+- Site: `https://www.codesolution.com.br/`
+- Diagnóstico: `https://www.codesolution.com.br/diagnostico/`
+- Codi: `https://www.codesolution.com.br/assistente/`
+- CRM: `https://www.codesolution.com.br/painel/crm/`
+- Content Worker: `https://code-solution-robo.victorhugoteixeirasimon6.workers.dev`
+- Attendant Worker: `https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev`
+
+## Status auditável
+- `docs/content-integrity-status.json`
+- `docs/deployment-status.json`
+- `docs/pages-deployment-status.json`
+- `docs/public-smoke-status.json`
+
+## Segurança
+- segredos ficam apenas em GitHub Actions Secrets ou Cloudflare runtime secrets;
+- painéis recebem `noindex`, `noarchive` e `Cache-Control: no-store`;
+- API do CRM exige `CRM_ADMIN_KEY`;
+- a landing de diagnóstico não transmite respostas;
+- o Codi orienta a não enviar informações sensíveis e requer início voluntário do atendimento.
 
 ## Comandos locais
 
 ```bash
-npm run check:workers
-npm run blog:index
+npm run check
 ```
-
-Deploy manual de Workers:
-
-```bash
-cd robo
-npx wrangler@4 deploy --config wrangler.toml
-npx wrangler@4 deploy --config wrangler-atendente.toml
-```
-
-## Regra de segurança de produção
-
-O código completo do Cloudflare Pages ainda deve ser versionado antes de habilitar deploy automático do site. O workflow automático deste repositório publica somente os Workers; ele não substitui o conteúdo do projeto Pages.
