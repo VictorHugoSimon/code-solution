@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://www.codesolution.com.br/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://www.codesolution.com.br/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.codesolution.com.br/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.codesolution.com.br/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.codesolution.com.br/"/>
+  </url>
+  <url>
+    <loc>https://www.codesolution.com.br/blog/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://www.codesolution.com.br/blog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.codesolution.com.br/blog/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.codesolution.com.br/blog/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.codesolution.com.br/blog/"/>
+  </url>
+  <url>
+    <loc>https://www.codesolution.com.br/servicos/</loc><changefreq>weekly</changefreq><priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://www.codesolution.com.br/servicos/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.codesolution.com.br/servicos/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.codesolution.com.br/servicos/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.codesolution.com.br/servicos/"/>
+  </url>
+  <url><loc>https://www.codesolution.com.br/servicos/#desenvolvimento</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/servicos/#automacao</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/servicos/#ia</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/servicos/#dados</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/#cases</loc><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/#parceiros</loc><priority>0.5</priority></url>
+  <url><loc>https://www.codesolution.com.br/#sobre</loc><priority>0.5</priority></url>
+  <url><loc>https://www.codesolution.com.br/#contato</loc><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#agentes-de-ia</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#automacao-pme</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#seguranca-preditiva</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#ia-generativa-empresas</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#rpa-financeiro</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#dashboards-que-decidem</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#lgpd-na-pratica</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#api-integracao-sistemas</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#chatbot-atendimento</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#nuvem-para-pme</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#dados-qualidade</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#mvp-produto-digital</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#automacao-marketing</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#ml-previsao-demanda</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#seguranca-senhas-mfa</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#bi-tempo-real</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#legado-modernizacao</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/#ia-etica-governanca</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+</urlset>
