@@ -6,7 +6,8 @@
     "blog:index": "node scripts/rebuild-blog-index.mjs",
     "blog:check": "node scripts/rebuild-blog-index.mjs --check",
     "blog:static": "node scripts/build-static-blog.mjs",
+    "pages:prepare": "node scripts/prepare-pages.mjs",
     "check:workers": "node --check robo/worker.js && node --check robo/atendente-worker.js",
-    "check": "npm run check:workers && npm run blog:index && npm run blog:static"
+    "check": "npm run check:workers && npm run blog:index && npm run blog:static && npm run pages:prepare"
   }
 }
