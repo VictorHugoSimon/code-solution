@@ -44,17 +44,23 @@ jobs:
         if: steps.blog_index.outcome == 'success'
         run: npm run blog:static
 
-      - name: Commit generated blog artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.blog_index.outcome == 'success' && steps.static_blog.outcome == 'success'
+      - name: Prepare Pages SEO/AEO and security
+        id: pages_prepare
+        continue-on-error: true
+        if: steps.static_blog.outcome == 'success'
+        run: npm run pages:prepare
+
+      - name: Commit generated web artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.blog_index.outcome == 'success' && steps.static_blog.outcome == 'success' && steps.pages_prepare.outcome == 'success'
         run: |
           git config user.name "Code Solution Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add content/blog/index.json deploy/blog deploy/en/blog deploy/es/blog deploy/sitemap.xml
+          git add content/blog/index.json deploy/blog deploy/en/blog deploy/es/blog deploy/sitemap.xml deploy/index.html deploy/servicos/index.html deploy/painel deploy/_headers
           if git diff --cached --quiet; then
-            echo "Generated blog is current"
+            echo "Generated web artifacts are current"
             exit 0
           fi
-          git commit -m "chore: rebuild crawlable blog"
+          git commit -m "chore: rebuild crawlable Pages bundle"
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -64,6 +70,7 @@ jobs:
           WORKER_OUTCOME: ${{ steps.worker_check.outcome }}
           BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
           STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
+          PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
@@ -73,15 +80,14 @@ jobs:
             "sourceCommit": "$SOURCE_SHA",
             "workerSyntax": "$WORKER_OUTCOME",
             "blogIndexBuild": "$BLOG_OUTCOME",
-            "staticBlogBuild": "$STATIC_OUTCOME"
+            "staticBlogBuild": "$STATIC_OUTCOME",
+            "pagesPreparation": "$PAGES_OUTCOME"
           }
           EOF
           git config user.name "Code Solution CI Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/content-integrity-status.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: record content integrity status"
           git pull --rebase origin main
           git push origin HEAD:main
@@ -92,7 +98,9 @@ jobs:
           WORKER_OUTCOME: ${{ steps.worker_check.outcome }}
           BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
           STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
+          PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
         run: |
           test "$WORKER_OUTCOME" = "success"
           test "$BLOG_OUTCOME" = "success"
           test "$STATIC_OUTCOME" = "success"
+          test "$PAGES_OUTCOME" = "success"
