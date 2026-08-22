@@ -1,0 +1,92 @@
+name: Render recovered Code Solution site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/render-recovered-site.yml'
+      - 'recovery/live/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-recovered-site
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render recovered pages
+        run: |
+          cat > /tmp/render.mjs <<'NODE'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { pathToFileURL } from 'node:url';
+
+          const pages = [
+            ['home', 'recovery/live/index.html'],
+            ['blog', 'recovery/live/blog/index.html'],
+            ['servicos', 'recovery/live/servicos/index.html'],
+            ['painel', 'recovery/live/painel/index.html'],
+            ['marketing', 'recovery/live/painel/marketing/index.html'],
+            ['inteligencia', 'recovery/live/painel/inteligencia/index.html'],
+          ];
+          await fs.mkdir('recovery/rendered', { recursive: true });
+          await fs.mkdir('recovery/text', { recursive: true });
+          const browser = await chromium.launch({ headless: true });
+          const results = [];
+          for (const [name, file] of pages) {
+            const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+            const errors = [];
+            page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+            page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+            try {
+              await page.goto(pathToFileURL(path.resolve(file)).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              await page.waitForFunction(() => !document.getElementById('__bundler_loading') || document.getElementById('__bundler_loading')?.textContent !== 'Unpacking...', null, { timeout: 30000 }).catch(() => {});
+              await page.waitForTimeout(3500);
+              const rendered = await page.evaluate(() => {
+                const clone = document.documentElement.cloneNode(true);
+                clone.querySelectorAll('script').forEach(s => s.remove());
+                clone.querySelectorAll('[id^="__bundler_"]').forEach(n => n.remove());
+                return '<!DOCTYPE html>\n' + clone.outerHTML;
+              });
+              const text = await page.locator('body').innerText().catch(() => '');
+              const title = await page.title();
+              await fs.writeFile(`recovery/rendered/${name}.html`, rendered, 'utf8');
+              await fs.writeFile(`recovery/text/${name}.txt`, text, 'utf8');
+              results.push({ name, ok: text.trim().length > 40, title, textLength: text.length, htmlLength: rendered.length, errors: errors.slice(0, 10) });
+            } catch (error) {
+              results.push({ name, ok: false, error: error.message, errors: errors.slice(0, 10) });
+            } finally {
+              await page.close();
+            }
+          }
+          await browser.close();
+          await fs.writeFile('recovery/rendered/RENDER-STATUS.json', JSON.stringify({ renderedAt: new Date().toISOString(), results }, null, 2) + '\n');
+          if (results.filter(r => ['home','blog','servicos'].includes(r.name)).some(r => !r.ok)) process.exitCode = 1;
+          NODE
+          node /tmp/render.mjs
+      - name: Commit rendered recovery
+        if: always()
+        run: |
+          git config user.name "Code Solution Recovery Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add recovery/rendered recovery/text
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: render recovered Code Solution pages"
+          git pull --rebase origin main
+          git push origin HEAD:main
