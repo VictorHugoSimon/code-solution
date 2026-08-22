@@ -1,0 +1,44 @@
+[
+  {
+    "slug": "ciberseguranca-e-lgpd-para-pme",
+    "date": "2026-08-08T15:25:28.986Z",
+    "title": "Cibersegurança e LGPD: O Que As Pequenas e Médias Empresas Precisam Saber",
+    "excerpt": "A cibersegurança e a Lei Geral de Proteção de Dados (LGPD) são fundamentais para as pequenas e médias empresas no Brasil, que precisam proteger seus dados e os de seus clientes. Descubra como.",
+    "category": "Segurança",
+    "readingTime": "10 min",
+    "metaDescription": "Aprenda sobre cibersegurança e LGPD para pequenas e médias empresas.",
+    "keywords": ["cibersegurança e LGPD","proteção de dados","segurança cibernética","Lei Geral de Proteção de Dados","privacidade de dados","segurança de informações"],
+    "bodyHtml": "<h2>Introdução</h2><p>As pequenas e médias empresas (PMEs) no Brasil enfrentam desafios diários para se manterem competitivas no mercado. No entanto, um dos maiores desafios é a segurança dos dados. Com a crescente dependência da tecnologia, as empresas precisam proteger seus dados e os de seus clientes contra ameaças cibernéticas. A cibersegurança e a Lei Geral de Proteção de Dados (LGPD) são fundamentais para as PMEs, pois ajudam a prevenir ataques cibernéticos e a garantir a privacidade dos dados.</p><h2>O Que é Cibersegurança?</h2><p>A cibersegurança é a prática de proteger sistemas, redes e dados contra ameaças cibernéticas. Isso inclui a proteção contra ataques de malware, phishing, ransomware e outros tipos de ameaças. A cibersegurança é fundamental para as PMEs, pois pode ajudar a prevenir perdas financeiras, danos à reputação e a perda de dados valiosos.</p><h2>O Que é LGPD?</h2><p>A LGPD é a Lei Geral de Proteção de Dados, que entrou em vigor em 2020. A lei regula a forma como as empresas coletam, armazenam e tratam os dados pessoais dos cidadãos brasileiros.</p><h2>Por Que a Cibersegurança e a LGPD São Importantes para as PMEs?</h2><p>As PMEs precisam proteger seus dados e os de seus clientes para evitar perdas financeiras, danos à reputação e a perda de dados valiosos. Além disso, a LGPD exige que as empresas mantenham a privacidade dos dados dos cidadãos brasileiros.</p><h2>Como as PMEs Podem Proteger seus Dados e os de seus Clientes?</h2><ul><li>Implementar medidas de segurança cibernética, como firewalls, antivírus e sistemas de detecção de intrusão.</li><li>Realizar auditorias de segurança regulares para identificar vulnerabilidades.</li><li>Treinar os funcionários sobre práticas de segurança cibernética.</li><li>Implementar a LGPD em suas operações, garantindo a privacidade dos dados dos cidadãos brasileiros.</li></ul><h2>Conclusão</h2><p>A cibersegurança e a LGPD são fundamentais para pequenas e médias empresas. A Code Solution pode apoiar a estruturação técnica de segurança, dados e processos digitais. Entre em contato para avaliar o cenário da sua empresa.</p>",
+    "pt": {
+      "title": "Cibersegurança e LGPD: O Que As Pequenas e Médias Empresas Precisam Saber",
+      "slug": "ciberseguranca-e-lgpd-para-pme",
+      "excerpt": "A cibersegurança e a Lei Geral de Proteção de Dados (LGPD) são fundamentais para as pequenas e médias empresas no Brasil, que precisam proteger seus dados e os de seus clientes. Descubra como.",
+      "category": "Segurança",
+      "readingTime": "10 min",
+      "metaDescription": "Aprenda sobre cibersegurança e LGPD para pequenas e médias empresas.",
+      "keywords": ["cibersegurança e LGPD","proteção de dados","segurança cibernética","Lei Geral de Proteção de Dados","privacidade de dados","segurança de informações"],
+      "bodyHtml": "<h2>Introdução</h2><p>As pequenas e médias empresas precisam tratar segurança e proteção de dados como parte da operação, não como reação a incidentes. O ponto de partida é conhecer os dados tratados, controlar acessos, manter sistemas atualizados, realizar backups e estabelecer processos claros.</p><h2>Próximos passos</h2><p>Mapeie dados e acessos, identifique riscos técnicos, priorize correções e documente o processo. A Code Solution pode apoiar esse diagnóstico e a evolução da arquitetura.</p>"
+    },
+    "en": {
+      "title": "Cybersecurity and LGPD: What Small and Medium-Sized Businesses Need to Know",
+      "slug": "ciberseguranca-e-lgpd-para-pme",
+      "excerpt": "Cybersecurity and Brazil's General Data Protection Law are essential for small and medium-sized businesses that need to protect company and customer data.",
+      "category": "Security",
+      "readingTime": "10 min",
+      "metaDescription": "Learn about cybersecurity and LGPD for small and medium-sized businesses.",
+      "keywords": ["cybersecurity","LGPD","data protection","data privacy"],
+      "bodyHtml": "<h2>Introduction</h2><p>Small and medium-sized businesses should treat cybersecurity and data protection as an operational discipline rather than a reaction to incidents. Start by mapping data, controlling access, keeping systems updated, maintaining backups and documenting processes.</p>"
+    },
+    "es": {
+      "title": "Ciberseguridad y LGPD: Lo Que Las Pequeñas y Medianas Empresas Necesitan Saber",
+      "slug": "ciberseguranca-e-lgpd-para-pme",
+      "excerpt": "La ciberseguridad y la Ley General de Protección de Datos son esenciales para pequeñas y medianas empresas que necesitan proteger sus datos y los de sus clientes.",
+      "category": "Seguridad",
+      "readingTime": "10 min",
+      "metaDescription": "Conozca los fundamentos de ciberseguridad y LGPD para pequeñas y medianas empresas.",
+      "keywords": ["ciberseguridad","LGPD","protección de datos","privacidad"],
+      "bodyHtml": "<h2>Introducción</h2><p>Las pequeñas y medianas empresas deben tratar la ciberseguridad y la protección de datos como una disciplina operativa. El punto de partida es mapear los datos, controlar accesos, mantener sistemas actualizados, realizar copias de seguridad y documentar los procesos.</p>"
+    },
+    "social": {}
+  }
+]
