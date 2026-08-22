@@ -28,7 +28,7 @@ jobs:
         run: |
           set +e
           home=failed; article=failed; diagnosis=failed; assistant=failed; robo=failed; attendant=failed; attendant_chat=failed
-          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""
+          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""; chat_http=""; chat_error=""
 
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html && grep -qi 'Cibersegurança e LGPD' /tmp/article.html && article=success
@@ -52,11 +52,12 @@ jobs:
           if [ "$attendant" = success ]; then
             attendant_storage=$(node -e "try{const x=require('/tmp/atendente.json');process.stdout.write(String(x.storage||''))}catch{}")
             chat_url="${attendant_url%/health}/chat"
-            curl --fail --silent --show-error --max-time 35 "$chat_url" \
+            chat_http=$(curl --silent --show-error --max-time 35 -o /tmp/chat.json -w '%{http_code}' "$chat_url" \
               -H 'content-type: application/json' \
               -H 'origin: https://www.codesolution.com.br' \
-              --data '{"messages":[{"role":"user","content":"Olá. Quero entender como a Code Solution pode ajudar uma empresa com automação de processos."}],"context":{"source":"production_smoke","consent":true}}' >/tmp/chat.json
-            node -e "const x=require('/tmp/chat.json'); if(x.ok===true && typeof x.message==='string' && x.message.length>10) process.exit(0); process.exit(1)" && attendant_chat=success
+              --data '{"messages":[{"role":"user","content":"Olá. Quero entender como a Code Solution pode ajudar uma empresa com automação de processos."}],"context":{"source":"production_smoke","consent":true}}')
+            node -e "try{const x=require('/tmp/chat.json'); if(x.ok===true && typeof x.message==='string' && x.message.length>10) process.exit(0); process.exit(1)}catch{process.exit(1)}" && attendant_chat=success
+            chat_error=$(node -e "try{const x=require('/tmp/chat.json');const e=String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80);process.stdout.write(e)}catch{}")
           fi
 
           echo "home=$home" >> "$GITHUB_OUTPUT"
@@ -66,6 +67,8 @@ jobs:
           echo "robo=$robo" >> "$GITHUB_OUTPUT"
           echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
           echo "attendant_chat=$attendant_chat" >> "$GITHUB_OUTPUT"
+          echo "chat_http=$chat_http" >> "$GITHUB_OUTPUT"
+          echo "chat_error=$chat_error" >> "$GITHUB_OUTPUT"
           echo "robo_url=$robo_url" >> "$GITHUB_OUTPUT"
           echo "attendant_url=$attendant_url" >> "$GITHUB_OUTPUT"
           echo "robo_build=$robo_build" >> "$GITHUB_OUTPUT"
@@ -82,6 +85,8 @@ jobs:
           ROBO: ${{ steps.check.outputs.robo }}
           ATTENDANT: ${{ steps.check.outputs.attendant }}
           ATTENDANT_CHAT: ${{ steps.check.outputs.attendant_chat }}
+          CHAT_HTTP: ${{ steps.check.outputs.chat_http }}
+          CHAT_ERROR: ${{ steps.check.outputs.chat_error }}
           ROBO_URL: ${{ steps.check.outputs.robo_url }}
           ATTENDANT_URL: ${{ steps.check.outputs.attendant_url }}
           ROBO_BUILD: ${{ steps.check.outputs.robo_build }}
@@ -105,6 +110,8 @@ jobs:
             "attendantWorkerHealth": "${ATTENDANT:-failed}",
             "attendantWorkerUrl": "$ATTENDANT_URL",
             "attendantChat": "${ATTENDANT_CHAT:-failed}",
+            "attendantChatHttp": "$CHAT_HTTP",
+            "attendantChatError": "$CHAT_ERROR",
             "attendantStorage": "$ATTENDANT_STORAGE"
           }
           EOF
