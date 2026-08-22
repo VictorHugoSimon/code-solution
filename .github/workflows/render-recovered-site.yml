@@ -18,6 +18,7 @@ concurrency:
 jobs:
   render:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,12 +51,16 @@ jobs:
           for (const [name, file] of pages) {
             const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
             const errors = [];
+            const requests = new Set();
             page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
             page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+            page.on('request', r => { const u = r.url(); if (/workers\.dev|codesolution\.com\.br/.test(u)) requests.add(u); });
             try {
               await page.goto(pathToFileURL(path.resolve(file)).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
               await page.waitForFunction(() => !document.getElementById('__bundler_loading') || document.getElementById('__bundler_loading')?.textContent !== 'Unpacking...', null, { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(3500);
+              const rawHtml = await page.content();
+              const workerUrls = [...new Set([...rawHtml.matchAll(/https:\/\/[^\s"'<>]+workers\.dev[^\s"'<>]*/g)].map(m => m[0]))];
               const rendered = await page.evaluate(() => {
                 const clone = document.documentElement.cloneNode(true);
                 clone.querySelectorAll('script').forEach(s => s.remove());
@@ -66,9 +71,9 @@ jobs:
               const title = await page.title();
               await fs.writeFile(`recovery/rendered/${name}.html`, rendered, 'utf8');
               await fs.writeFile(`recovery/text/${name}.txt`, text, 'utf8');
-              results.push({ name, ok: text.trim().length > 40, title, textLength: text.length, htmlLength: rendered.length, errors: errors.slice(0, 10) });
+              results.push({ name, ok: text.trim().length > 40, title, textLength: text.length, htmlLength: rendered.length, workerUrls, observedRequests: [...requests], errors: errors.slice(0, 10) });
             } catch (error) {
-              results.push({ name, ok: false, error: error.message, errors: errors.slice(0, 10) });
+              results.push({ name, ok: false, error: error.message, observedRequests: [...requests], errors: errors.slice(0, 10) });
             } finally {
               await page.close();
             }
@@ -84,9 +89,7 @@ jobs:
           git config user.name "Code Solution Recovery Bot"
           git config user.email "actions@users.noreply.github.com"
           git add recovery/rendered recovery/text
-          if git diff --cached --quiet; then
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: render recovered Code Solution pages"
           git pull --rebase origin main
           git push origin HEAD:main
