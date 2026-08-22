@@ -27,11 +27,13 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          home=failed; article=failed; robo=failed; attendant=failed
+          home=failed; article=failed; diagnosis=failed; assistant=failed; robo=failed; attendant=failed; attendant_chat=failed
           robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""
 
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html && grep -qi 'Cibersegurança e LGPD' /tmp/article.html && article=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/diagnostico/ >/tmp/diagnostico.html && grep -qi 'Diagnóstico Digital' /tmp/diagnostico.html && diagnosis=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/assistente/ >/tmp/assistente.html && grep -qi 'Codi' /tmp/assistente.html && assistant=success
 
           for base in victorhugo1612 victorhugoteixeirasimon6; do
             url="https://code-solution-robo.${base}.workers.dev/health"
@@ -49,12 +51,21 @@ jobs:
           fi
           if [ "$attendant" = success ]; then
             attendant_storage=$(node -e "try{const x=require('/tmp/atendente.json');process.stdout.write(String(x.storage||''))}catch{}")
+            chat_url="${attendant_url%/health}/chat"
+            curl --fail --silent --show-error --max-time 35 "$chat_url" \
+              -H 'content-type: application/json' \
+              -H 'origin: https://www.codesolution.com.br' \
+              --data '{"messages":[{"role":"user","content":"Olá. Quero entender como a Code Solution pode ajudar uma empresa com automação de processos."}],"context":{"source":"production_smoke","consent":true}}' >/tmp/chat.json
+            node -e "const x=require('/tmp/chat.json'); if(x.ok===true && typeof x.message==='string' && x.message.length>10) process.exit(0); process.exit(1)" && attendant_chat=success
           fi
 
           echo "home=$home" >> "$GITHUB_OUTPUT"
           echo "article=$article" >> "$GITHUB_OUTPUT"
+          echo "diagnosis=$diagnosis" >> "$GITHUB_OUTPUT"
+          echo "assistant=$assistant" >> "$GITHUB_OUTPUT"
           echo "robo=$robo" >> "$GITHUB_OUTPUT"
           echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
+          echo "attendant_chat=$attendant_chat" >> "$GITHUB_OUTPUT"
           echo "robo_url=$robo_url" >> "$GITHUB_OUTPUT"
           echo "attendant_url=$attendant_url" >> "$GITHUB_OUTPUT"
           echo "robo_build=$robo_build" >> "$GITHUB_OUTPUT"
@@ -66,8 +77,11 @@ jobs:
         env:
           HOME: ${{ steps.check.outputs.home }}
           ARTICLE: ${{ steps.check.outputs.article }}
+          DIAGNOSIS: ${{ steps.check.outputs.diagnosis }}
+          ASSISTANT: ${{ steps.check.outputs.assistant }}
           ROBO: ${{ steps.check.outputs.robo }}
           ATTENDANT: ${{ steps.check.outputs.attendant }}
+          ATTENDANT_CHAT: ${{ steps.check.outputs.attendant_chat }}
           ROBO_URL: ${{ steps.check.outputs.robo_url }}
           ATTENDANT_URL: ${{ steps.check.outputs.attendant_url }}
           ROBO_BUILD: ${{ steps.check.outputs.robo_build }}
@@ -82,12 +96,15 @@ jobs:
             "sourceCommit": "$SOURCE_SHA",
             "home": "${HOME:-failed}",
             "staticArticle": "${ARTICLE:-failed}",
+            "diagnosticLanding": "${DIAGNOSIS:-failed}",
+            "standaloneAssistant": "${ASSISTANT:-failed}",
             "contentWorkerHealth": "${ROBO:-failed}",
             "contentWorkerUrl": "$ROBO_URL",
             "contentWorkerBuild": "$ROBO_BUILD",
             "contentWorkerReady": "$ROBO_READY",
             "attendantWorkerHealth": "${ATTENDANT:-failed}",
             "attendantWorkerUrl": "$ATTENDANT_URL",
+            "attendantChat": "${ATTENDANT_CHAT:-failed}",
             "attendantStorage": "$ATTENDANT_STORAGE"
           }
           EOF
