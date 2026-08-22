@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-08-22T12:20:00Z",
+  "sourceCommit": "6ed50934d00c1292fca691053634cb9ebd69acf1",
+  "build": "success",
+  "cloudflareSecretsConfigured": "false",
+  "pagesDeploy": "skipped",
+  "publicSmokeTest": "skipped",
+  "project": "codesolution-site",
+  "note": "Build validated by content-integrity/static-blog CI. Same repository Cloudflare secrets are absent, so direct Pages deployment cannot authenticate yet."
+}
