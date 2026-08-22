@@ -1,0 +1,66 @@
+name: Public production smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-smoke.yml'
+      - 'robo/**'
+      - 'deploy/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: public-smoke-main
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check public endpoints
+        id: check
+        continue-on-error: true
+        run: |
+          set +e
+          home=failed; article=failed; robo=failed; attendant=failed
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html && grep -qi 'Cibersegurança e LGPD' /tmp/article.html && article=success
+          curl -L --fail --silent --show-error --max-time 20 https://code-solution-robo.victorhugo1612.workers.dev/health >/tmp/robo.json && robo=success
+          curl -L --fail --silent --show-error --max-time 20 https://code-solution-atendente.victorhugo1612.workers.dev/health >/tmp/atendente.json && attendant=success
+          echo "home=$home" >> "$GITHUB_OUTPUT"
+          echo "article=$article" >> "$GITHUB_OUTPUT"
+          echo "robo=$robo" >> "$GITHUB_OUTPUT"
+          echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
+
+      - name: Persist public status
+        if: always()
+        env:
+          HOME: ${{ steps.check.outputs.home }}
+          ARTICLE: ${{ steps.check.outputs.article }}
+          ROBO: ${{ steps.check.outputs.robo }}
+          ATTENDANT: ${{ steps.check.outputs.attendant }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          cat > docs/public-smoke-status.json <<EOF
+          {
+            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sourceCommit": "$SOURCE_SHA",
+            "home": "${HOME:-failed}",
+            "staticArticle": "${ARTICLE:-failed}",
+            "contentWorkerHealth": "${ROBO:-failed}",
+            "attendantWorkerHealth": "${ATTENDANT:-failed}"
+          }
+          EOF
+          git config user.name "Code Solution Smoke Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/public-smoke-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record public smoke status"
+          git pull --rebase origin main
+          git push origin HEAD:main
