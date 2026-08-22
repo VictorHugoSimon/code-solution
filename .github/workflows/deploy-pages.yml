@@ -7,6 +7,7 @@ on:
       - 'deploy/**'
       - 'content/blog/**'
       - 'scripts/build-static-blog.mjs'
+      - 'scripts/prepare-pages.mjs'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
@@ -34,9 +35,12 @@ jobs:
         run: |
           npm run blog:index
           npm run blog:static
+          npm run pages:prepare
           test -f deploy/index.html
+          test -f deploy/_headers
           test -f deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
           grep -q 'BlogPosting' deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
+          grep -q 'SEO-FALLBACK:START' deploy/index.html
 
       - name: Validate Cloudflare credentials
         id: cf
