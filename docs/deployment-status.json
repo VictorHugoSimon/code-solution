@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-22T11:25:36Z",
-  "sourceCommit": "a25cc6fd5abe4ed047f33e77777614b63ebd2aa8",
+  "checkedAt": "2026-08-22T11:32:52Z",
+  "sourceCommit": "6f426925de0bdfbb2cb9049cd6682127de7725c4",
   "cloudflareSecretsConfigured": "false",
   "contentWorkerDeploy": "skipped",
   "attendantWorkerDeploy": "skipped",
