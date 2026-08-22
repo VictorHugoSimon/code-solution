@@ -1,0 +1,63 @@
+name: Recover live Code Solution site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-live-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: recover-live-site
+  cancel-in-progress: true
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download published pages
+        run: |
+          set -euo pipefail
+          mkdir -p recovery/live/blog recovery/live/servicos recovery/live/painel/marketing recovery/live/painel/inteligencia
+          curl -fLsS --retry 3 https://www.codesolution.com.br/ -o recovery/live/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/blog/ -o recovery/live/blog/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/servicos/ -o recovery/live/servicos/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/painel/ -o recovery/live/painel/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/painel/marketing/ -o recovery/live/painel/marketing/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/painel/inteligencia/ -o recovery/live/painel/inteligencia/index.html
+          curl -fLsS --retry 3 https://www.codesolution.com.br/sitemap.xml -o recovery/live/sitemap.xml || true
+          curl -fLsS --retry 3 https://www.codesolution.com.br/robots.txt -o recovery/live/robots.txt || true
+          curl -fLsS --retry 3 https://www.codesolution.com.br/blog-posts.js -o recovery/live/blog-posts.js || true
+          curl -fLsS --retry 3 https://www.codesolution.com.br/site-i18n.js -o recovery/live/site-i18n.js || true
+          curl -fLsS --retry 3 https://www.codesolution.com.br/og-image.png -o recovery/live/og-image.png || true
+          cat > recovery/live/RECOVERY.json <<EOF
+          {
+            "capturedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "source": "https://www.codesolution.com.br",
+            "purpose": "Disaster recovery and migration of the currently published Cloudflare Pages bundle"
+          }
+          EOF
+      - name: Validate recovered HTML
+        run: |
+          test -s recovery/live/index.html
+          test -s recovery/live/blog/index.html
+          test -s recovery/live/servicos/index.html
+          grep -qi '<html' recovery/live/index.html
+          echo "Recovered bytes:"
+          find recovery/live -type f -printf '%p %s bytes\n' | sort
+      - name: Commit recovery snapshot
+        run: |
+          git config user.name "Code Solution Recovery Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add recovery/live
+          if git diff --cached --quiet; then
+            echo "No recovery changes"
+            exit 0
+          fi
+          git commit -m "chore: snapshot live Code Solution site"
+          git pull --rebase origin main
+          git push origin HEAD:main
