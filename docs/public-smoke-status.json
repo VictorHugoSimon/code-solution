@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-22T12:28:36Z",
-  "sourceCommit": "c9b980705040292c0db295e86c5517ccd63e5d7a",
+  "checkedAt": "2026-08-22T12:29:17Z",
+  "sourceCommit": "b18ec9b216563fa12b2f491d3c29232dbd89f582",
   "home": "success",
   "staticArticle": "failed",
   "diagnosticLanding": "failed",
@@ -12,5 +12,7 @@
   "attendantWorkerHealth": "success",
   "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health",
   "attendantChat": "failed",
+  "attendantChatHttp": "500",
+  "attendantChatError": "TypeError:Cannotreadpropertiesofundefinedreading0",
   "attendantStorage": ""
 }
