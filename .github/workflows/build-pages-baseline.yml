@@ -1,0 +1,46 @@
+name: Build Pages baseline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-pages-baseline.yml'
+      - 'recovery/live/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-pages-baseline
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild deploy directory from recovered production
+        run: |
+          set -euo pipefail
+          mkdir -p deploy
+          rsync -a --exclude 'RECOVERY.json' recovery/live/ deploy/
+          test -s deploy/index.html
+          test -s deploy/blog/index.html
+          test -s deploy/servicos/index.html
+          test -s deploy/blog-posts.js
+          test -s deploy/site-i18n.js
+          test -s deploy/sitemap.xml
+          test -s deploy/robots.txt
+          test -s deploy/painel/crm/index.html
+      - name: Commit reconstructed deploy baseline
+        run: |
+          git config user.name "Code Solution Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add deploy
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: reconstruct complete Pages deploy baseline"
+          git pull --rebase origin main
+          git push origin HEAD:main
