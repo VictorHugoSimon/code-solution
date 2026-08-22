@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnóstico Digital Gratuito | Code Solution</title>
+<meta name="description" content="Faça um diagnóstico digital rápido da sua empresa e descubra oportunidades em software, automação, inteligência artificial, integrações, dados e segurança.">
+<link rel="canonical" href="https://www.codesolution.com.br/diagnostico/">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+<meta property="og:title" content="Diagnóstico Digital Gratuito | Code Solution"><meta property="og:description" content="Avalie a maturidade digital da sua empresa em poucos minutos."><meta property="og:type" content="website"><meta property="og:url" content="https://www.codesolution.com.br/diagnostico/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Diagnóstico Digital Code Solution","url":"https://www.codesolution.com.br/diagnostico/","description":"Autoavaliação de maturidade digital para empresas.","publisher":{"@type":"Organization","name":"Code Solution","url":"https://www.codesolution.com.br/"}}</script>
+<style>
+:root{--bg:#0a0810;--card:#15111d;--line:rgba(255,255,255,.10);--text:#f2eef8;--muted:#aaa4b5;--accent:#8d52e8;--ok:#6ee7aa}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#1d1132 0,#0a0810 42%);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:940px;margin:auto;padding:48px 20px 80px}.eyebrow{color:#b98cff;font-weight:800;text-transform:uppercase;letter-spacing:.12em;font-size:12px}h1{font-size:clamp(34px,6vw,62px);line-height:1.04;margin:10px 0 16px;letter-spacing:-.035em}h2{margin-top:0}.lead{font-size:20px;color:#c7c1d0;max-width:760px}.box,.question,.result{background:rgba(21,17,29,.92);border:1px solid var(--line);border-radius:18px;padding:22px;margin:18px 0}.question h3{font-size:17px;margin:0 0 14px}.options{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.options label{display:block}.options input{position:absolute;opacity:0}.options span{display:block;border:1px solid var(--line);border-radius:12px;padding:11px 8px;text-align:center;cursor:pointer;color:var(--muted)}.options input:checked+span{border-color:var(--accent);background:rgba(141,82,232,.16);color:white}.btn{display:inline-block;border:0;border-radius:12px;background:var(--accent);color:white;font-weight:800;padding:13px 18px;cursor:pointer;text-decoration:none}.btn.secondary{background:#1d1827;border:1px solid var(--line)}.actions{display:flex;gap:10px;flex-wrap:wrap}.meter{height:14px;background:#211b2b;border-radius:999px;overflow:hidden}.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7b3fe4,#6ee7aa);transition:.35s}.score{font-size:54px;font-weight:900;letter-spacing:-.05em}.muted{color:var(--muted)}.result{display:none}.privacy{font-size:13px;color:var(--muted)}ul{padding-left:20px}@media(max-width:650px){.options{grid-template-columns:1fr 1fr}main{padding-top:30px}}
+</style>
+</head>
+<body><main>
+<div class="eyebrow">Code Solution · Diagnóstico Digital</div><h1>Onde a tecnologia está travando o crescimento da sua empresa?</h1><p class="lead">Responda 8 perguntas. O cálculo acontece apenas no seu navegador; nenhuma resposta é enviada ou armazenada. No final, você recebe uma leitura de maturidade e pode levar o resultado para uma conversa técnica.</p>
+<form id="quiz">
+<div id="questions"></div>
+<div class="actions"><button class="btn" type="submit">Ver meu diagnóstico</button><button class="btn secondary" type="reset">Limpar respostas</button></div>
+<p class="privacy">Privacidade: esta autoavaliação não solicita nome, telefone, e-mail ou dados da empresa e não transmite suas respostas.</p>
+</form>
+<section id="result" class="result" aria-live="polite"><div class="eyebrow">Resultado</div><div class="score"><span id="score">0</span><small style="font-size:20px">/100</small></div><div class="meter"><i id="bar"></i></div><h2 id="level"></h2><p id="explain" class="lead" style="font-size:18px"></p><div id="priorities" class="box"></div><div class="actions"><a id="whatsapp" class="btn" target="_blank" rel="noopener noreferrer">Levar resultado para o WhatsApp</a><a href="/servicos/" class="btn secondary">Conhecer serviços</a></div></section>
+<section class="box"><h2>O que avaliamos</h2><p class="muted">Processos, integração entre sistemas, dados, automação, IA, segurança, experiência do cliente e capacidade de evoluir software. O objetivo não é dar um “selo”, mas indicar onde uma conversa técnica pode gerar mais impacto.</p></section>
+</main>
+<script>
+const Q=[
+ ['processos','Processos operacionais','Quanto dos processos críticos depende de planilhas, mensagens ou trabalho manual?'],
+ ['integracao','Integração','Os sistemas trocam dados automaticamente, sem copiar e colar informações?'],
+ ['dados','Dados e indicadores','Gestores conseguem acessar indicadores confiáveis sem consolidar várias fontes manualmente?'],
+ ['automacao','Automação','Tarefas repetitivas de alto volume já estão automatizadas?'],
+ ['ia','Inteligência artificial','A empresa já usa IA integrada a processos reais, e não apenas ferramentas isoladas?'],
+ ['seguranca','Segurança e governança','Acessos, backups, atualizações e tratamento de dados possuem responsáveis e rotinas definidas?'],
+ ['cliente','Experiência do cliente','Atendimento, vendas ou suporte possuem histórico, SLA e continuidade entre canais?'],
+ ['evolucao','Evolução tecnológica','A empresa consegue lançar melhorias digitais sem depender de longos ciclos ou soluções improvisadas?']
+];
+const opts=[['0','Não / muito fraco'],['1','Parcial'],['2','Bom'],['3','Estruturado']];
+const wrap=document.getElementById('questions');
+wrap.innerHTML=Q.map(([id,title,text],i)=>`<section class="question"><div class="eyebrow">${String(i+1).padStart(2,'0')} · ${title}</div><h3>${text}</h3><div class="options">${opts.map(([v,l])=>`<label><input required type="radio" name="${id}" value="${v}"><span>${l}</span></label>`).join('')}</div></section>`).join('');
+const quiz=document.getElementById('quiz');
+quiz.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(quiz);let sum=0;const low=[];Q.forEach(([id,title])=>{const v=Number(fd.get(id));sum+=v;if(v<=1)low.push(title)});const score=Math.round(sum/(Q.length*3)*100);let level,explain;if(score<35){level='Maturidade inicial';explain='Há espaço relevante para organizar a base digital antes de acelerar. Priorize gargalos manuais, dados dispersos e riscos operacionais.'}else if(score<60){level='Maturidade em evolução';explain='A empresa já possui iniciativas digitais, mas ainda há ilhas de tecnologia. Integração e automação tendem a gerar ganhos rápidos.'}else if(score<80){level='Maturidade estruturada';explain='A base é consistente. O próximo salto costuma vir de automação avançada, IA integrada e melhor uso dos dados.'}else{level='Maturidade avançada';explain='A empresa demonstra boa base digital. O foco pode migrar para escala, inteligência, governança e inovação contínua.'}document.getElementById('score').textContent=score;document.getElementById('bar').style.width=score+'%';document.getElementById('level').textContent=level;document.getElementById('explain').textContent=explain;document.getElementById('priorities').innerHTML=`<b>Prioridades sugeridas</b><ul>${(low.length?low:['Escala, governança e inovação']).slice(0,4).map(x=>`<li>${x}</li>`).join('')}</ul>`;const msg=`Olá, Code Solution. Fiz o Diagnóstico Digital e meu resultado foi ${score}/100 (${level}). Quero entender quais seriam as prioridades para minha empresa.`;document.getElementById('whatsapp').href='https://wa.me/5518996809954?text='+encodeURIComponent(msg);document.getElementById('result').style.display='block';document.getElementById('result').scrollIntoView({behavior:'smooth'});});
+quiz.addEventListener('reset',()=>{document.getElementById('result').style.display='none'});
+</script></body></html>
