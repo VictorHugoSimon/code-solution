@@ -65,6 +65,9 @@ Depois que ambos existirem, os workflows de Pages e Workers executam a automaç�
 - a landing de diagnóstico não transmite respostas;
 - o Codi orienta a não enviar informações sensíveis e requer início voluntário do atendimento.
 
+## Meta Pixel
+A infraestrutura de marketing está preparada para receber instrumentação, mas o Pixel ID real ainda não foi encontrado em fonte confiável. Não versionar um ID fictício. A instalação deve ocorrer quando o identificador oficial da conta Meta Business estiver disponível.
+
 ## Comandos locais
 
 ```bash
