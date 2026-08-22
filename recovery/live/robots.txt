@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# IA / motores de resposta (GEO) — liberados para indexação
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: https://www.codesolution.com.br/sitemap.xml
