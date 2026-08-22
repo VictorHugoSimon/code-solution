@@ -51,4 +51,13 @@
   <url><loc>https://www.codesolution.com.br/blog/#bi-tempo-real</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/#legado-modernizacao</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/#ia-etica-governanca</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+
+  <!-- STATIC-BLOG:START -->
+  <url><loc>https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/en/blog/ciberseguranca-e-lgpd-para-pme/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/es/blog/ciberseguranca-e-lgpd-para-pme/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/blog/proteja-seu-negocio-ciberseguranca-e-lgpd/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/en/blog/proteja-seu-negocio-ciberseguranca-e-lgpd/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/es/blog/proteja-seu-negocio-ciberseguranca-e-lgpd/</loc><lastmod>2026-08-08</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <!-- STATIC-BLOG:END -->
 </urlset>
