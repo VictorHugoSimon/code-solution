@@ -3,6 +3,7 @@ const GITHUB_REPO = 'code-solution';
 const GITHUB_BRANCH = 'main';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const BUILD_VERSION = 'commercial-engine-2026-08-22.2';
 
 const TOPICS = [
   { category: 'Inteligência Artificial', keyword: 'inteligência artificial para empresas' },
@@ -16,7 +17,17 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/health') {
-      return json({ ok: true, service: 'code-solution-robo', model: env.AI_MODEL || DEFAULT_MODEL, now: new Date().toISOString() });
+      return json({
+        ok: true,
+        service: 'code-solution-robo',
+        build: BUILD_VERSION,
+        model: env.AI_MODEL || DEFAULT_MODEL,
+        ready: Boolean(env.AI_API_KEY && env.GITHUB_TOKEN),
+        aiConfigured: Boolean(env.AI_API_KEY),
+        githubConfigured: Boolean(env.GITHUB_TOKEN),
+        manualRunConfigured: Boolean(env.MANUAL_KEY),
+        now: new Date().toISOString(),
+      });
     }
     if (url.pathname === '/run') {
       if (!safeEqual(url.searchParams.get('key') || '', env.MANUAL_KEY || '')) return json({ ok: false, error: 'unauthorized' }, 401);
@@ -50,7 +61,7 @@ async function runPipeline(env, ctx, meta) {
   if (env.GOOGLE_SA_EMAIL && env.GOOGLE_SA_KEY) {
     ctx.waitUntil(requestGoogleIndexing(env, article.slug).catch((error) => console.warn('indexing skipped', cleanError(error))));
   }
-  return { trigger: meta.trigger, slug: article.slug, category: article.pt.category, date: article.date };
+  return { trigger: meta.trigger, slug: article.pt.slug || article.slug, category: article.pt.category, date: article.date };
 }
 
 function pickTopic(index) {
@@ -78,144 +89,129 @@ async function generateArticle(env, topic) {
       messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
     }),
   });
-  if (!response.ok) throw new Error(`groq_${response.status}:${(await response.text()).slice(0, 500)}`);
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('groq_empty_response');
-  try { return JSON.parse(content); } catch { throw new Error('groq_invalid_json'); }
+  if (!response.ok) throw new Error(`Groq ${response.status}: ${(await response.text()).slice(0, 300)}`);
+  return JSON.parse(dataContent(await response.json()));
 }
 
-function normalizeAndValidate(raw, topic, index) {
+function normalizeAndValidate(draft, topic, index) {
   const now = new Date().toISOString();
-  const article = { ...raw, date: now };
-  for (const locale of ['pt', 'en', 'es']) {
-    if (!article[locale] || typeof article[locale] !== 'object') throw new Error(`missing_locale_${locale}`);
-    article[locale].title = cleanText(article[locale].title);
-    article[locale].excerpt = cleanText(article[locale].excerpt);
-    article[locale].metaDescription = cleanText(article[locale].metaDescription);
-    article[locale].category = cleanText(article[locale].category || topic.category);
-    article[locale].readingTime = cleanText(article[locale].readingTime || '6 min');
-    article[locale].keywords = Array.isArray(article[locale].keywords) ? article[locale].keywords.map(cleanText).filter(Boolean).slice(0, 12) : [];
-    article[locale].body = sanitizeHtml(String(article[locale].body || article[locale].bodyHtml || ''));
-    if (!article[locale].title || article[locale].body.length < 1200) throw new Error(`content_too_short_${locale}`);
-    if (hasMojibake(JSON.stringify(article[locale]))) throw new Error(`encoding_error_${locale}`);
-  }
-  const baseSlug = slugify(article.pt.slug || article.pt.title);
-  const used = new Set(index.map((p) => p.slug).filter(Boolean));
-  article.slug = used.has(baseSlug) ? `${baseSlug}-${now.slice(0, 10)}` : baseSlug;
-  for (const locale of ['pt', 'en', 'es']) article[locale].slug = article.slug;
-  article.pt.category = topic.category;
-  article.cat = topic.category;
-  article.kw = topic.keyword;
+  const pt = normalizeLocale(draft.pt, topic.category);
+  const en = normalizeLocale(draft.en, topic.category, pt);
+  const es = normalizeLocale(draft.es, topic.category, pt);
+  const baseSlug = slugify(pt.slug || pt.title);
+  if (!baseSlug) throw new Error('slug inválido');
+  const recentSlugs = new Set(index.map((p) => p.slug || p?.pt?.slug).filter(Boolean));
+  let slug = baseSlug;
+  if (recentSlugs.has(slug)) slug = `${baseSlug}-${now.slice(0, 10)}`;
+  pt.slug = slug; en.slug = slug; es.slug = slug;
+  const article = { pt, en, es, social: normalizeSocial(draft.social), slug, cat: pt.category, kw: pt.keywords[0] || topic.keyword, date: now };
+  validateArticle(article);
   return article;
 }
 
-function toIndexItem(article) {
-  const flatten = (locale) => ({
-    title: article[locale].title,
-    slug: article.slug,
-    excerpt: article[locale].excerpt,
-    category: article[locale].category,
-    readingTime: article[locale].readingTime,
-    metaDescription: article[locale].metaDescription,
-    keywords: article[locale].keywords,
-    bodyHtml: article[locale].body,
-  });
+function normalizeLocale(input = {}, fallbackCategory, fallback = {}) {
   return {
-    slug: article.slug,
-    date: article.date,
-    title: article.pt.title,
-    excerpt: article.pt.excerpt,
-    category: article.pt.category,
-    readingTime: article.pt.readingTime,
-    metaDescription: article.pt.metaDescription,
-    keywords: article.pt.keywords,
-    bodyHtml: article.pt.body,
-    pt: flatten('pt'), en: flatten('en'), es: flatten('es'), social: article.social || {},
+    title: cleanText(input.title || fallback.title),
+    slug: slugify(input.slug || input.title || fallback.slug || fallback.title),
+    excerpt: cleanText(input.excerpt || fallback.excerpt),
+    category: cleanText(input.category || fallback.category || fallbackCategory),
+    readingTime: cleanText(input.readingTime || fallback.readingTime || '8 min'),
+    metaDescription: cleanText(input.metaDescription || input.excerpt || fallback.metaDescription || fallback.excerpt).slice(0, 220),
+    keywords: Array.from(new Set((Array.isArray(input.keywords) ? input.keywords : fallback.keywords || []).map(cleanText).filter(Boolean))).slice(0, 10),
+    body: sanitizeHtml(String(input.body || fallback.body || '')),
   };
 }
 
-async function loadIndex(env) {
-  try {
-    const result = await getGithubJson(env, 'content/blog/index.json');
-    return Array.isArray(result) ? result : [];
-  } catch (error) {
-    if (String(error.message).includes('github_404')) return [];
-    throw error;
+function validateArticle(article) {
+  for (const lang of ['pt', 'en', 'es']) {
+    const item = article[lang];
+    if (!item.title || item.title.length < 12) throw new Error(`${lang}.title inválido`);
+    if (!item.excerpt || item.excerpt.length < 80) throw new Error(`${lang}.excerpt curto`);
+    if (!item.body || item.body.length < 1800) throw new Error(`${lang}.body curto`);
+    if (/Ã.|Â.|â€|�/.test(`${item.title} ${item.excerpt} ${item.body}`)) throw new Error(`${lang}: encoding inválido`);
+    if (/<script|<iframe|javascript:|\son\w+=/i.test(item.body)) throw new Error(`${lang}: HTML inseguro`);
   }
+}
+
+async function loadIndex(env) {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/content/blog/index.json?ref=${GITHUB_BRANCH}`, { headers: githubHeaders(env) });
+  if (response.status === 404) return [];
+  if (!response.ok) throw new Error(`GitHub index ${response.status}`);
+  const data = await response.json();
+  return JSON.parse(decodeBase64Utf8(data.content || 'W10='));
 }
 
 async function upsertArticle(env, article) {
   const path = `content/blog/${article.slug}.json`;
-  const exists = await githubFileMeta(env, path);
-  if (exists) throw new Error('slug_collision_after_normalization');
+  const existing = await githubGet(env, path);
+  if (existing) throw new Error(`slug já existe no repositório: ${article.slug}`);
   await putGithubJson(env, path, article, `robô: novo artigo "${article.pt.title}"`);
 }
 
-async function githubFileMeta(env, path) {
-  const response = await githubFetch(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(GITHUB_BRANCH)}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`github_${response.status}:${(await response.text()).slice(0, 300)}`);
-  return response.json();
-}
-
-async function getGithubJson(env, path) {
-  const meta = await githubFileMeta(env, path);
-  if (!meta) throw new Error('github_404');
-  const text = decodeBase64(meta.content || '');
-  return JSON.parse(text);
-}
-
 async function putGithubJson(env, path, value, message) {
-  const existing = await githubFileMeta(env, path);
-  const body = { message, content: encodeBase64(JSON.stringify(value, null, 2) + '\n'), branch: GITHUB_BRANCH };
-  if (existing?.sha) body.sha = existing.sha;
-  const response = await githubFetch(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodePath(path)}`, { method: 'PUT', body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`github_put_${response.status}:${(await response.text()).slice(0, 500)}`);
+  const existing = await githubGet(env, path);
+  const payload = { message, branch: GITHUB_BRANCH, content: encodeBase64Utf8(JSON.stringify(value, null, 2) + '\n') };
+  if (existing?.sha) payload.sha = existing.sha;
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`, {
+    method: 'PUT', headers: githubHeaders(env), body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`GitHub write ${response.status}: ${(await response.text()).slice(0, 400)}`);
   return response.json();
 }
 
-async function githubFetch(env, path, init = {}) {
-  return fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'Code-Solution-Content-Robot',
-      'Content-Type': 'application/json',
-      ...(init.headers || {}),
-    },
-  });
+async function githubGet(env, path) {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`, { headers: githubHeaders(env) });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GitHub read ${response.status}`);
+  return response.json();
+}
+
+function githubHeaders(env) {
+  return { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'CodeSolutionContentBot' };
 }
 
 async function requestGoogleIndexing(env, slug) {
-  if (!env.GOOGLE_INDEXING_WEBHOOK) return;
-  const response = await fetch(env.GOOGLE_INDEXING_WEBHOOK, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: `https://www.codesolution.com.br/blog/#${slug}`, type: 'URL_UPDATED' }),
-  });
-  if (!response.ok) throw new Error(`indexing_${response.status}`);
+  const token = await googleAccessToken(env);
+  for (const lang of ['', 'en/', 'es/']) {
+    const url = `https://www.codesolution.com.br/${lang}blog/${slug}/`.replace(/([^:]\/)\/+/, '$1');
+    const response = await fetch('https://indexing.googleapis.com/v3/urlNotifications:publish', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ url, type: 'URL_UPDATED' }),
+    });
+    if (!response.ok) throw new Error(`Google indexing ${response.status}`);
+  }
 }
 
-function sanitizeHtml(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/\son\w+\s*=\s*(["']).*?\1/gi, '')
-    .replace(/javascript:/gi, '')
-    .trim();
+async function googleAccessToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = b64url(JSON.stringify({ iss: env.GOOGLE_SA_EMAIL, scope: 'https://www.googleapis.com/auth/indexing', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3500 }));
+  const key = await crypto.subtle.importKey('pkcs8', pemToArrayBuffer(env.GOOGLE_SA_KEY), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${header}.${claim}`));
+  const assertion = `${header}.${claim}.${b64url(new Uint8Array(signature))}`;
+  const body = new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion });
+  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  if (!response.ok) throw new Error(`Google token ${response.status}`);
+  return (await response.json()).access_token;
 }
 
-function hasMojibake(value) { return /Ã.|Â.|â€|�/.test(value); }
+function normalizeSocial(social = {}) {
+  const out = {};
+  for (const network of ['linkedin', 'instagram', 'facebook']) {
+    const item = social[network] || {};
+    out[network] = { caption: cleanText(item.caption), hashtags: cleanText(item.hashtags) };
+  }
+  return out;
+}
+function toIndexItem(article) { return { slug: article.slug, date: article.date, title: article.pt.title, excerpt: article.pt.excerpt, category: article.pt.category, readingTime: article.pt.readingTime, metaDescription: article.pt.metaDescription, keywords: article.pt.keywords, bodyHtml: article.pt.body, pt: { ...article.pt, bodyHtml: article.pt.body }, en: { ...article.en, bodyHtml: article.en.body }, es: { ...article.es, bodyHtml: article.es.body }, social: article.social }; }
+function sanitizeHtml(html) { return html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<iframe[\s\S]*?<\/iframe>/gi, '').replace(/\son\w+\s*=\s*(["']).*?\1/gi, '').replace(/javascript:/gi, '').trim(); }
 function cleanText(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
-function slugify(value) { return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) || `artigo-${Date.now()}`; }
-function encodePath(path) { return path.split('/').map(encodeURIComponent).join('/'); }
-function encodeBase64(str) { const bytes = new TextEncoder().encode(str); let bin = ''; for (const byte of bytes) bin += String.fromCharCode(byte); return btoa(bin); }
-function decodeBase64(str) { const bin = atob(String(str).replace(/\s/g, '')); const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
+function slugify(value) { return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90); }
+function dataContent(data) { const content = data?.choices?.[0]?.message?.content; if (!content) throw new Error('Groq sem conteúdo'); return content; }
+function cleanError(error) { return String(error?.message || error).replace(/[A-Za-z0-9_\-]{24,}/g, '[redacted]').slice(0, 500); }
+function requireEnv(env, names) { for (const name of names) if (!env[name]) throw new Error(`configuração ausente: ${name}`); }
+function json(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
 function safeEqual(a, b) { if (!a || !b || a.length !== b.length) return false; let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i); return diff === 0; }
-function requireEnv(env, names) { for (const name of names) if (!env[name]) throw new Error(`missing_env_${name}`); }
-function cleanError(error) { return String(error?.message || error || 'unknown_error').slice(0, 800); }
-function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }); }
+function encodeBase64Utf8(value) { const bytes = new TextEncoder().encode(value); let binary = ''; for (const b of bytes) binary += String.fromCharCode(b); return btoa(binary); }
+function decodeBase64Utf8(value) { const binary = atob(String(value).replace(/\n/g, '')); const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
+function b64url(value) { const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value; let binary=''; for (const b of bytes) binary += String.fromCharCode(b); return btoa(binary).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); }
+function pemToArrayBuffer(pem) { const clean = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s+/g, ''); const bin = atob(clean); return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer; }
