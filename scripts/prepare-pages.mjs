@@ -10,7 +10,7 @@ const pages = [
     canonical: 'https://www.codesolution.com.br/',
     title: 'Code Solution — Desenvolvimento de software, automação, IA e dados',
     description: 'Software house brasileira para desenvolvimento de software sob medida, automação de processos, inteligência artificial, integrações, dados e BI.',
-    body: `<main><h1>Engenharia de software para empresas</h1><p>A Code Solution desenvolve software sob medida, automação de processos, inteligência artificial, integrações, bancos de dados e soluções de BI para empresas.</p><h2>O que fazemos</h2><ul><li>Desenvolvimento de sistemas e plataformas</li><li>Automação de processos e integrações</li><li>Agentes e soluções com inteligência artificial</li><li>Arquitetura de dados, bancos de dados e BI</li></ul><h2>Como começar</h2><p>Conte o cenário da sua empresa e a equipe da Code Solution avalia o problema, a viabilidade técnica e o próximo passo recomendado.</p><p><a href="/diagnostico/">Faça o Diagnóstico Digital</a> · <a href="/servicos/">Conheça os serviços</a> · <a href="/blog/artigos/">Leia o blog técnico</a> · <a href="https://wa.me/5518996809954">Fale pelo WhatsApp</a></p></main>`,
+    body: `<main><h1>Engenharia de software para empresas</h1><p>A Code Solution desenvolve software sob medida, automação de processos, inteligência artificial, integrações, bancos de dados e soluções de BI para empresas.</p><h2>O que fazemos</h2><ul><li>Desenvolvimento de sistemas e plataformas</li><li>Automação de processos e integrações</li><li>Agentes e soluções com inteligência artificial</li><li>Arquitetura de dados, bancos de dados e BI</li></ul><h2>Como começar</h2><p>Conte o cenário da sua empresa e a equipe da Code Solution avalia o problema, a viabilidade técnica e o próximo passo recomendado.</p><p><a href="/diagnostico/">Faça o Diagnóstico Digital</a> · <a href="/assistente/">Converse com o Codi</a> · <a href="/servicos/">Conheça os serviços</a> · <a href="/blog/artigos/">Leia o blog técnico</a></p></main>`,
     schema: [
       { '@context':'https://schema.org','@type':'Organization', name:'Code Solution', url:'https://www.codesolution.com.br/', foundingDate:'2018', description:'Desenvolvimento de software sob medida, automação de processos, inteligência artificial, integrações e dados para empresas.' },
       { '@context':'https://schema.org','@type':'WebSite', name:'Code Solution', url:'https://www.codesolution.com.br/', inLanguage:['pt-BR','en','es'] },
@@ -21,7 +21,7 @@ const pages = [
     canonical: 'https://www.codesolution.com.br/servicos/',
     title: 'Serviços de tecnologia | Code Solution',
     description: 'Desenvolvimento sob medida, automação, inteligência artificial, integrações, dados e BI para empresas.',
-    body: `<main><h1>Serviços de tecnologia para empresas</h1><p>A Code Solution transforma problemas operacionais e oportunidades de negócio em soluções digitais sustentáveis.</p><h2>Desenvolvimento de software</h2><p>Sistemas, portais, plataformas, APIs e aplicações construídas conforme o processo e a necessidade do negócio.</p><h2>Automação e integrações</h2><p>Automação de tarefas repetitivas, integração entre sistemas e redução de retrabalho operacional.</p><h2>Inteligência artificial</h2><p>Agentes de IA, atendimento digital, copilotos internos e automações inteligentes com governança e integração aos processos existentes.</p><h2>Dados e BI</h2><p>Estruturação de dados, bancos de dados, indicadores, dashboards e camadas de informação para apoiar decisões.</p><p><a href="/diagnostico/">Avaliar maturidade digital</a> · <a href="https://wa.me/5518996809954">Solicitar uma conversa técnica</a></p></main>`,
+    body: `<main><h1>Serviços de tecnologia para empresas</h1><p>A Code Solution transforma problemas operacionais e oportunidades de negócio em soluções digitais sustentáveis.</p><h2>Desenvolvimento de software</h2><p>Sistemas, portais, plataformas, APIs e aplicações construídas conforme o processo e a necessidade do negócio.</p><h2>Automação e integrações</h2><p>Automação de tarefas repetitivas, integração entre sistemas e redução de retrabalho operacional.</p><h2>Inteligência artificial</h2><p>Agentes de IA, atendimento digital, copilotos internos e automações inteligentes com governança e integração aos processos existentes.</p><h2>Dados e BI</h2><p>Estruturação de dados, bancos de dados, indicadores, dashboards e camadas de informação para apoiar decisões.</p><p><a href="/diagnostico/">Avaliar maturidade digital</a> · <a href="/assistente/">Conversar com o Codi</a> · <a href="https://wa.me/5518996809954">Solicitar uma conversa técnica</a></p></main>`,
     schema: [{ '@context':'https://schema.org','@type':'Service', provider:{'@type':'Organization',name:'Code Solution',url:'https://www.codesolution.com.br/'}, serviceType:'Desenvolvimento de software, automação, inteligência artificial, integrações e dados', areaServed:'BR' }],
   },
   {
@@ -29,7 +29,7 @@ const pages = [
     canonical: 'https://www.codesolution.com.br/blog/',
     title: 'Blog técnico | Code Solution',
     description: 'Conteúdo sobre software, automação, inteligência artificial, dados, integrações e segurança para empresas.',
-    body: `<main><h1>Conteúdo técnico para empresas</h1><p>Artigos da Code Solution sobre desenvolvimento de software, automação, inteligência artificial, dados, integrações, segurança e modernização tecnológica.</p><p><a href="/blog/artigos/">Ver artigos indexáveis</a> · <a href="/diagnostico/">Fazer Diagnóstico Digital</a></p></main>`,
+    body: `<main><h1>Conteúdo técnico para empresas</h1><p>Artigos da Code Solution sobre desenvolvimento de software, automação, inteligência artificial, dados, integrações, segurança e modernização tecnológica.</p><p><a href="/blog/artigos/">Ver artigos indexáveis</a> · <a href="/diagnostico/">Fazer Diagnóstico Digital</a> · <a href="/assistente/">Conversar com o Codi</a></p></main>`,
     schema: [{ '@context':'https://schema.org','@type':'Blog', name:'Blog Code Solution', url:'https://www.codesolution.com.br/blog/', publisher:{'@type':'Organization',name:'Code Solution',url:'https://www.codesolution.com.br/'} }],
   },
 ];
@@ -38,7 +38,7 @@ for (const page of pages) await enhancePage(page);
 for (const file of ['painel/index.html','painel/marketing/index.html','painel/inteligencia/index.html','painel/crm/index.html']) await noindex(file);
 await writeHeaders();
 await ensureSitemapPages();
-console.log('Pages prepared: SEO/AEO fallbacks, diagnostic discovery and security headers applied.');
+console.log('Pages prepared: SEO/AEO fallbacks, acquisition routes and security headers applied.');
 
 async function enhancePage({ file, canonical, title, description, body, schema }) {
   const target = path.join(deploy, file);
@@ -73,7 +73,7 @@ async function ensureSitemapPages() {
   const target = path.join(deploy, 'sitemap.xml');
   let xml = await fs.readFile(target, 'utf8');
   xml = xml.replace(/\n?\s*<!-- STATIC-PAGES:START -->[\s\S]*?<!-- STATIC-PAGES:END -->\s*/g, '\n');
-  const block = `\n  <!-- STATIC-PAGES:START -->\n  <url><loc>https://www.codesolution.com.br/diagnostico/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://www.codesolution.com.br/blog/artigos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <!-- STATIC-PAGES:END -->\n`;
+  const block = `\n  <!-- STATIC-PAGES:START -->\n  <url><loc>https://www.codesolution.com.br/diagnostico/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://www.codesolution.com.br/assistente/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://www.codesolution.com.br/blog/artigos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <!-- STATIC-PAGES:END -->\n`;
   xml = xml.replace(/<\/urlset>\s*$/i, `${block}</urlset>\n`);
   await fs.writeFile(target, xml, 'utf8');
 }
