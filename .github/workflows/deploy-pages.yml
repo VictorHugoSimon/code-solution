@@ -38,9 +38,11 @@ jobs:
           npm run pages:prepare
           test -f deploy/index.html
           test -f deploy/_headers
+          test -f deploy/_worker.js
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
+          node --check deploy/_worker.js
           grep -q 'BlogPosting' deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
           grep -q 'SEO-FALLBACK:START' deploy/index.html
 
@@ -98,12 +100,16 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/diagnostico/ >/tmp/diagnostico.html
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/assistente/ >/tmp/assistente.html
+          panel_http=$(curl --silent --output /tmp/panel.txt --write-out '%{http_code}' https://www.codesolution.com.br/painel/crm/)
+          api_http=$(curl --silent --output /tmp/api.txt --write-out '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
           grep -qi "Cibersegurança e LGPD" /tmp/article.html
           grep -qi "BlogPosting" /tmp/article.html
           grep -qi "Diagnóstico Digital" /tmp/diagnostico.html
           grep -qi "Codi" /tmp/assistente.html
           grep -qi "Sitemap:" /tmp/robots.txt
           grep -qi "/diagnostico/" /tmp/sitemap.xml
+          test "$panel_http" = "401"
+          test "$api_http" = "401"
 
       - name: Persist Pages deployment status
         if: always()
@@ -125,6 +131,7 @@ jobs:
             "projectLookup": "${PROJECT_OUTCOME:-skipped}",
             "pagesDeploy": "${PAGES_OUTCOME:-skipped}",
             "publicSmokeTest": "${SMOKE_OUTCOME:-skipped}",
+            "panelEdgeAuthRequired": true,
             "project": "codesolution-site",
             "deploymentMode": "direct-upload-production"
           }
