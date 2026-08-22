@@ -1,0 +1,11 @@
+{
+  "name": "code-solution-automation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "blog:index": "node scripts/rebuild-blog-index.mjs",
+    "blog:check": "node scripts/rebuild-blog-index.mjs --check",
+    "check:workers": "node --check robo/worker.js && node --check robo/atendente-worker.js",
+    "check": "npm run check:workers && npm run blog:index"
+  }
+}

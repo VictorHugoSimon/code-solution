@@ -1,0 +1,9 @@
+name = "code-solution-robo"
+main = "worker.js"
+compatibility_date = "2026-08-22"
+
+[triggers]
+crons = ["0 12 * * 2,5"]
+
+[vars]
+AI_MODEL = "llama-3.1-8b-instant"

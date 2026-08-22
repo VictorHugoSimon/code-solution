@@ -1,0 +1,39 @@
+name: Content integrity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - 'content/blog/**'
+      - 'scripts/**'
+      - 'robo/**'
+      - 'package.json'
+      - '.github/workflows/content-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:workers
+      - run: npm run blog:index
+      - name: Commit regenerated blog index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet -- content/blog/index.json; then
+            echo "Index already current"
+            exit 0
+          fi
+          git config user.name "Code Solution Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add content/blog/index.json
+          git commit -m "chore: rebuild blog index"
+          git push
