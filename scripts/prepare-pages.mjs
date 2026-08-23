@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const deploy = path.join(root, 'deploy');
+const ATTENDANT_URL = 'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev';
 
 const homeFaq = [
   ['Quanto custa desenvolver um sistema sob medida?','Depende do escopo, das integrações e do nível de complexidade. A Code Solution faz um diagnóstico gratuito e envia uma proposta com valor e prazo fechados para o escopo acordado.'],
@@ -13,9 +14,49 @@ const homeFaq = [
   ['E depois da entrega, tem suporte?','Sim. A Code Solution oferece sustentação contínua, monitoramento e evolução do produto conforme o negócio muda.'],
 ];
 
-const sharedStyle = `<style data-cs-extension-style>:root{--cs-bg:#0a0810;--cs-card:#12101a;--cs-line:rgba(255,255,255,.09);--cs-text:#ece9f2;--cs-muted:#a7a4b6;--cs-purple:#9b5cff;--cs-lilac:#c9b0ff}.cs-extension{position:relative;z-index:3;background:var(--cs-bg);color:var(--cs-text);font:15px/1.62 system-ui,-apple-system,Segoe UI,sans-serif;padding:72px max(20px,calc((100% - 1120px)/2))}.cs-extension *{box-sizing:border-box}.cs-extension h2,.cs-extension h3{line-height:1.12;margin-top:0}.cs-extension h2{font-size:clamp(30px,4vw,48px);max-width:24ch}.cs-kicker{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--cs-purple)}.cs-intro{color:var(--cs-muted);font-size:18px;max-width:760px}.cs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:24px}.cs-card{border:1px solid var(--cs-line);border-radius:16px;background:var(--cs-card);padding:22px}.cs-card h3{font-size:17px;margin-bottom:8px}.cs-card p{color:var(--cs-muted);margin:0}.cs-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.cs-btn{display:inline-block;padding:12px 16px;border-radius:11px;text-decoration:none;font-weight:800;background:linear-gradient(135deg,#7B3FE4,#9b5cff);color:white}.cs-btn.alt{background:#171321;border:1px solid var(--cs-line)}.cs-faq{margin-top:54px}.cs-faq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.cs-table{margin-top:24px;border:1px solid var(--cs-line);border-radius:14px;overflow:hidden}.cs-row{display:grid;grid-template-columns:1fr 1fr 1fr}.cs-row>*{padding:14px;border-right:1px solid var(--cs-line);border-bottom:1px solid var(--cs-line)}.cs-row>*:last-child{border-right:0}.cs-head{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--cs-lilac);background:rgba(155,92,255,.08)}@media(max-width:760px){.cs-grid,.cs-faq-grid,.cs-row{grid-template-columns:1fr}.cs-head{display:none}.cs-row>*{border-right:0}}</style>`;
+const sharedStyle = `<style data-cs-extension-style>
+:root{--cs-bg:#0a0810;--cs-card:#12101a;--cs-line:rgba(255,255,255,.09);--cs-text:#ece9f2;--cs-muted:#a7a4b6;--cs-purple:#9b5cff;--cs-lilac:#c9b0ff;--cs-green:#5ce49a;--cs-red:#ff8294}
+.cs-extension{position:relative;z-index:3;background:var(--cs-bg);color:var(--cs-text);font:15px/1.62 system-ui,-apple-system,Segoe UI,sans-serif;padding:72px max(20px,calc((100% - 1120px)/2))}.cs-extension *{box-sizing:border-box}.cs-extension h2,.cs-extension h3{line-height:1.12;margin-top:0}.cs-extension h2{font-size:clamp(30px,4vw,48px);max-width:24ch}.cs-kicker{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--cs-purple)}.cs-intro{color:var(--cs-muted);font-size:18px;max-width:760px}.cs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:24px}.cs-card{border:1px solid var(--cs-line);border-radius:16px;background:var(--cs-card);padding:22px}.cs-card h3{font-size:17px;margin-bottom:8px}.cs-card p{color:var(--cs-muted);margin:0}.cs-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.cs-btn{display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;padding:12px 16px;border-radius:11px;text-decoration:none;font-weight:800;background:linear-gradient(135deg,#7B3FE4,#9b5cff);color:white}.cs-btn.alt{background:#171321;border:1px solid var(--cs-line)}.cs-btn:disabled{opacity:.55;cursor:not-allowed}.cs-faq{margin-top:54px}.cs-faq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.cs-table{margin-top:24px;border:1px solid var(--cs-line);border-radius:14px;overflow:hidden}.cs-row{display:grid;grid-template-columns:1fr 1fr 1fr}.cs-row>*{padding:14px;border-right:1px solid var(--cs-line);border-bottom:1px solid var(--cs-line)}.cs-row>*:last-child{border-right:0}.cs-head{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--cs-lilac);background:rgba(155,92,255,.08)}
+.cs-lead{margin-top:54px;border:1px solid rgba(155,92,255,.25);border-radius:20px;background:linear-gradient(135deg,rgba(123,63,228,.14),rgba(255,255,255,.02));padding:clamp(24px,4vw,38px)}.cs-lead h2{margin-bottom:10px}.cs-lead-form{margin-top:24px}.cs-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.cs-field{display:flex;flex-direction:column;gap:6px}.cs-field.full{grid-column:1/-1}.cs-field span{font-size:12px;font-weight:700;color:var(--cs-muted)}.cs-field input,.cs-field textarea{width:100%;border:1px solid var(--cs-line);background:#0d0a13;color:var(--cs-text);border-radius:11px;padding:12px 13px;font:inherit;outline:none}.cs-field input:focus,.cs-field textarea:focus{border-color:rgba(155,92,255,.7);box-shadow:0 0 0 3px rgba(155,92,255,.12)}.cs-field textarea{min-height:96px;resize:vertical}.cs-consent{display:flex;gap:9px;align-items:flex-start;margin:14px 0;color:var(--cs-muted);font-size:12px}.cs-consent a{color:var(--cs-lilac)}.cs-result{min-height:20px;margin-top:10px;font-size:13px;color:var(--cs-muted)}.cs-result.ok{color:var(--cs-green)}.cs-result.err{color:var(--cs-red)}
+@media(max-width:760px){.cs-grid,.cs-faq-grid,.cs-row,.cs-form-grid{grid-template-columns:1fr}.cs-head{display:none}.cs-row>*{border-right:0}.cs-field.full{grid-column:auto}}
+</style>`;
 
-const homeVisible = `${sharedStyle}<section class="cs-extension" id="cs-commercial-extension"><span class="cs-kicker">Próximo passo</span><h2>Entenda o cenário antes de decidir a tecnologia.</h2><p class="cs-intro">Você pode explorar soluções por setor, estimar uma faixa de investimento, medir a maturidade digital ou conversar com o Codi. Tudo parte do problema real da operação.</p><div class="cs-grid"><article class="cs-card"><h3>Soluções por setor</h3><p>Agro, logística e varejo com problemas, soluções e resultados esperados.</p><div class="cs-actions"><a class="cs-btn" href="/setores/">Ver setores</a></div></article><article class="cs-card"><h3>Calculadora de projeto</h3><p>Faixa preliminar de investimento e prazo para software, app, SaaS, automação e BI.</p><div class="cs-actions"><a class="cs-btn" href="/calculadora/">Estimar projeto</a></div></article><article class="cs-card"><h3>Diagnóstico Digital</h3><p>Score 0–100 para identificar maturidade, gargalos e prioridades.</p><div class="cs-actions"><a class="cs-btn" href="/diagnostico/">Fazer diagnóstico</a></div></article><article class="cs-card"><h3>Codi</h3><p>Assistente digital para entender sua necessidade e encaminhar o próximo passo.</p><div class="cs-actions"><a class="cs-btn" href="/assistente/">Conversar com o Codi</a></div></article></div><div class="cs-faq" id="faq"><span class="cs-kicker">Dúvidas frequentes</span><h2>O que as empresas perguntam antes de contratar</h2><div class="cs-faq-grid">${homeFaq.map(([q,a])=>`<article class="cs-card"><h3>${q}</h3><p>${a}</p></article>`).join('')}</div></div></section>`;
+const homeLead = `<div class="cs-lead" id="cs-home-lead"><span class="cs-kicker">Fale com a Code Solution</span><h2>Conte o que sua empresa precisa resolver.</h2><p class="cs-intro">Ao enviar, sua solicitação entra no CRM da Code Solution para o time continuar o atendimento. Você também pode seguir pelo Codi ou WhatsApp.</p><form class="cs-lead-form" id="cs-home-lead-form" novalidate><div class="cs-form-grid"><label class="cs-field"><span>Nome *</span><input name="name" autocomplete="name" maxlength="120" required></label><label class="cs-field"><span>WhatsApp *</span><input name="whatsapp" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="(18) 99999-9999" required></label><label class="cs-field full"><span>Empresa</span><input name="company" autocomplete="organization" maxlength="160"></label><label class="cs-field full"><span>O que você precisa resolver? *</span><textarea name="need" maxlength="1800" required></textarea></label></div><label class="cs-consent"><input name="consent" type="checkbox"> <span>Autorizo a Code Solution a usar estes dados para responder esta solicitação, conforme a <a href="/privacidade/">Política de Privacidade</a>.</span></label><div class="cs-actions"><button class="cs-btn" type="submit">Registrar solicitação</button><a class="cs-btn alt" href="/assistente/">Conversar com o Codi</a><a class="cs-btn alt" href="https://wa.me/5518996809954?text=Ol%C3%A1%2C%20quero%20falar%20com%20a%20Code%20Solution." target="_blank" rel="noopener noreferrer">WhatsApp</a></div><p class="cs-result" data-cs-lead-result role="status" aria-live="polite"></p></form></div><script data-cs-home-lead-script>
+(function(){
+  var root=document.getElementById('cs-home-lead');
+  if(!root||root.dataset.bound==='1')return;
+  root.dataset.bound='1';
+  var form=root.querySelector('#cs-home-lead-form');
+  var result=root.querySelector('[data-cs-lead-result]');
+  var button=form&&form.querySelector('button[type="submit"]');
+  function show(text,kind){if(!result)return;result.textContent=text;result.className='cs-result '+(kind||'');}
+  function attr(){try{var q=new URLSearchParams(location.search);return{source:q.get('utm_source')||'site_home',campaign:q.get('utm_campaign')||null,medium:q.get('utm_medium')||null,content:q.get('utm_content')||null,term:q.get('utm_term')||null,landingPage:location.pathname,referrer:document.referrer||null};}catch(e){return{source:'site_home',landingPage:'/'}}}
+  if(!form)return;
+  form.addEventListener('submit',async function(ev){
+    ev.preventDefault();
+    var fd=new FormData(form),name=String(fd.get('name')||'').trim(),whatsapp=String(fd.get('whatsapp')||'').trim(),company=String(fd.get('company')||'').trim(),need=String(fd.get('need')||'').trim();
+    if(name.length<2){show('Informe seu nome.','err');return;}
+    if(whatsapp.replace(/\\D/g,'').length<10){show('Informe um WhatsApp válido.','err');return;}
+    if(need.length<8){show('Descreva a necessidade com um pouco mais de detalhe.','err');return;}
+    if(!form.querySelector('input[name="consent"]').checked){show('Marque a autorização para que a Code Solution possa retornar seu contato.','err');return;}
+    if(button)button.disabled=true;show('Registrando sua solicitação…','');
+    var payload=Object.assign({name:name,whatsapp:whatsapp,company:company||undefined,need:need,businessType:'empresa',consentAt:new Date().toISOString()},attr());
+    try{
+      var response=await fetch('${ATTENDANT_URL}/lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+      var data=await response.json();
+      if(!response.ok)throw new Error(data.error||'lead_failed');
+      show('✓ Solicitação registrada. Protocolo '+data.leadId+'. Próxima ação: '+(data.nextAction||'retorno do time')+'.','ok');
+      if(button)button.textContent='Solicitação registrada';
+      try{if(window.gtag)window.gtag('event','generate_lead',{method:'home_form',lead_score:data.score||0});}catch(e){}
+    }catch(e){
+      show('Não consegui registrar agora. Você pode tentar novamente, conversar com o Codi ou usar o WhatsApp.','err');
+      if(button)button.disabled=false;
+    }
+  });
+})();
+<\/script>`;
+
+const homeVisible = `${sharedStyle}<section class="cs-extension" id="cs-commercial-extension"><span class="cs-kicker">Próximo passo</span><h2>Entenda o cenário antes de decidir a tecnologia.</h2><p class="cs-intro">Você pode explorar soluções por setor, estimar uma faixa de investimento, medir a maturidade digital ou conversar com o Codi. Tudo parte do problema real da operação.</p><div class="cs-grid"><article class="cs-card"><h3>Soluções por setor</h3><p>Agro, logística e varejo com problemas, soluções e resultados esperados.</p><div class="cs-actions"><a class="cs-btn" href="/setores/">Ver setores</a></div></article><article class="cs-card"><h3>Calculadora de projeto</h3><p>Faixa preliminar de investimento e prazo para software, app, SaaS, automação e BI.</p><div class="cs-actions"><a class="cs-btn" href="/calculadora/">Estimar projeto</a></div></article><article class="cs-card"><h3>Diagnóstico Digital</h3><p>Score 0–100 para identificar maturidade, gargalos e prioridades.</p><div class="cs-actions"><a class="cs-btn" href="/diagnostico/">Fazer diagnóstico</a></div></article><article class="cs-card"><h3>Codi</h3><p>Assistente digital para entender sua necessidade e encaminhar o próximo passo.</p><div class="cs-actions"><a class="cs-btn" href="/assistente/">Conversar com o Codi</a></div></article></div>${homeLead}<div class="cs-faq" id="faq"><span class="cs-kicker">Dúvidas frequentes</span><h2>O que as empresas perguntam antes de contratar</h2><div class="cs-faq-grid">${homeFaq.map(([q,a])=>`<article class="cs-card"><h3>${q}</h3><p>${a}</p></article>`).join('')}</div></div></section>`;
 
 const servicesVisible = `${sharedStyle}<section class="cs-extension" id="cs-services-aeo"><span class="cs-kicker">Resposta direta</span><h2>Software, automação, IA e dados sob medida para o processo da sua empresa.</h2><p class="cs-intro" data-aeo-answer>A Code Solution desenvolve sistemas e plataformas quando o processo da empresa não cabe em uma solução genérica, automatiza tarefas repetitivas e integra sistemas existentes, cria agentes de IA conectados ao contexto do negócio e estrutura dados e BI para apoiar decisões. O projeto começa pelo processo, pelas integrações e pelo resultado que precisa ser medido.</p><div class="cs-grid"><article class="cs-card"><h3>Desenvolvimento de software</h3><p>Sistemas, portais, plataformas, APIs e aplicações construídas conforme o processo real.</p></article><article class="cs-card"><h3>Automação e integrações</h3><p>Redução de retrabalho, conexão entre sistemas e automação de rotinas operacionais.</p></article><article class="cs-card"><h3>Inteligência artificial</h3><p>Agentes, copilotos e atendimento digital integrados aos dados e regras da empresa.</p></article><article class="cs-card"><h3>Dados e BI</h3><p>Bancos de dados, indicadores, dashboards e camadas de informação para decisão.</p></article></div><div class="cs-table"><div class="cs-row"><div class="cs-head">Problema</div><div class="cs-head">Solução</div><div class="cs-head">Resultado esperado</div></div><div class="cs-row"><div>Planilhas e retrabalho entre áreas</div><div>Automação e integração de sistemas</div><div>Menos operação manual e mais rastreabilidade</div></div><div class="cs-row"><div>Processo específico que o ERP não cobre</div><div>Sistema sob medida integrado ao ERP</div><div>Processo digital sem trocar o que já funciona</div></div><div class="cs-row"><div>Dados espalhados e decisão tardia</div><div>Base estruturada, BI e alertas</div><div>Indicadores confiáveis e ação mais rápida</div></div></div><div class="cs-actions"><a class="cs-btn" href="/setores/">Ver por setor</a><a class="cs-btn alt" href="/calculadora/">Calcular faixa</a><a class="cs-btn alt" href="/diagnostico/">Diagnóstico Digital</a><a class="cs-btn alt" href="/assistente/">Conversar com o Codi</a></div></section>`;
 
@@ -56,23 +97,65 @@ for (const page of pages) await enhancePage(page);
 for (const file of ['painel/index.html','painel/marketing/index.html','painel/inteligencia/index.html','painel/crm/index.html']) await noindex(file);
 await writeHeaders();
 await ensureSitemapPages();
-console.log('Pages prepared: SEO/AEO fallbacks, visible commercial extensions, acquisition routes and security headers applied.');
+console.log('Pages prepared: SEO/AEO fallbacks, unpacked commercial surfaces, acquisition routes and security headers applied.');
 
 async function enhancePage({ file, canonical, title, description, body, schema, visible = '' }) {
   const target = path.join(deploy, file);
   let html = await fs.readFile(target, 'utf8');
-  html = html.replace(/\n?\s*<!-- SEO-FALLBACK:START -->[\s\S]*?<!-- SEO-FALLBACK:END -->\s*/g, '\n');
-  html = html.replace(/\n?\s*<!-- SEO-SCHEMA:START -->[\s\S]*?<!-- SEO-SCHEMA:END -->\s*/g, '\n');
-  html = html.replace(/\n?\s*<!-- COMMERCIAL-EXTENSION:START -->[\s\S]*?<!-- COMMERCIAL-EXTENSION:END -->\s*/g, '\n');
-  const headBlock = `\n  <!-- SEO-SCHEMA:START -->\n  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">\n  <link rel="canonical" href="${canonical}">\n  ${schema.map(x => `<script type="application/ld+json">${JSON.stringify(x).replace(/</g,'\\u003c')}</script>`).join('\n  ')}\n  <!-- SEO-SCHEMA:END -->\n`;
+  html = stripInjected(html);
+
+  const headBlock = buildHeadBlock(canonical, schema);
   html = html.replace('</head>', `${headBlock}</head>`);
+
   const fallback = `\n  <!-- SEO-FALLBACK:START -->\n  <noscript><section style="max-width:900px;margin:40px auto;padding:24px;color:#eee;background:#0a0810;font:16px/1.7 system-ui,sans-serif"><h2 style="font-size:0;line-height:0;margin:0">${escapeHtml(title)}</h2>${body}</section></noscript>\n  <!-- SEO-FALLBACK:END -->\n`;
+  html = html.replace('</body>', `${fallback}</body>`);
+
   const visibleBlock = visible ? `\n  <!-- COMMERCIAL-EXTENSION:START -->\n  ${visible}\n  <!-- COMMERCIAL-EXTENSION:END -->\n` : '';
-  html = html.replace('</body>', `${fallback}${visibleBlock}</body>`);
-  if (!html.includes(`content="${description}`) && html.includes('<head>')) {
+  html = injectBundledTemplate(html, { headBlock, visibleBlock, description });
+
+  if (!hasDescription(html, description) && html.includes('<head>')) {
     html = html.replace('<head>', `<head>\n  <meta name="description" content="${escapeAttr(description)}">`);
   }
   await fs.writeFile(target, html, 'utf8');
+}
+
+function injectBundledTemplate(html, { headBlock, visibleBlock, description }) {
+  const re = /<script type="__bundler\/template">([\s\S]*?)<\/script>/;
+  const match = html.match(re);
+  if (!match) {
+    return visibleBlock ? html.replace('</body>', `${visibleBlock}</body>`) : html;
+  }
+
+  let template;
+  try {
+    template = JSON.parse(match[1]);
+  } catch (error) {
+    throw new Error(`Unable to parse bundled template: ${error.message}`);
+  }
+
+  template = stripInjected(template);
+  if (template.includes('</head>')) template = template.replace('</head>', `${headBlock}</head>`);
+  if (!hasDescription(template, description) && template.includes('<head>')) template = template.replace('<head>', `<head>\n<meta name="description" content="${escapeAttr(description)}">`);
+  if (visibleBlock && template.includes('</body>')) template = template.replace('</body>', `${visibleBlock}</body>`);
+
+  const serialized = JSON.stringify(template).replace(/<\//g, '<\\u002F');
+  const replacement = `<script type="__bundler/template">\n${serialized}\n</script>`;
+  return html.slice(0, match.index) + replacement + html.slice(match.index + match[0].length);
+}
+
+function stripInjected(html) {
+  return html
+    .replace(/\n?\s*<!-- SEO-FALLBACK:START -->[\s\S]*?<!-- SEO-FALLBACK:END -->\s*/g, '\n')
+    .replace(/\n?\s*<!-- SEO-SCHEMA:START -->[\s\S]*?<!-- SEO-SCHEMA:END -->\s*/g, '\n')
+    .replace(/\n?\s*<!-- COMMERCIAL-EXTENSION:START -->[\s\S]*?<!-- COMMERCIAL-EXTENSION:END -->\s*/g, '\n');
+}
+
+function buildHeadBlock(canonical, schema) {
+  return `\n  <!-- SEO-SCHEMA:START -->\n  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">\n  <link rel="canonical" href="${canonical}">\n  ${schema.map(x => `<script type="application/ld+json">${JSON.stringify(x).replace(/</g,'\\u003c')}</script>`).join('\n  ')}\n  <!-- SEO-SCHEMA:END -->\n`;
+}
+
+function hasDescription(html, description) {
+  return html.includes(`content="${description}`) || html.includes(`content='${description}`);
 }
 
 async function noindex(file) {
