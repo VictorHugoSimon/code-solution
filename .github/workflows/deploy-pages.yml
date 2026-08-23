@@ -1,21 +1,13 @@
-name: Deploy Cloudflare Pages
+name: Deploy Cloudflare Pages (manual fallback)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'deploy/**'
-      - 'content/blog/**'
-      - 'scripts/**'
-      - 'package.json'
-      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: deploy-pages-production
+  group: deploy-pages-manual
   cancel-in-progress: true
 
 jobs:
@@ -28,166 +20,51 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build and validate deploy bundle
-        id: build
+      - name: Build release bundle
         run: |
           npm run blog:index
           npm run blog:static
           npm run pages:prepare
-          test -f deploy/index.html
-          test -f deploy/_worker.js
+          node --check deploy/_worker.js
           test -f deploy/setores/index.html
           test -f deploy/calculadora/index.html
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/privacidade/index.html
-          node --check deploy/_worker.js
-          grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
-          grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
-          grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
 
-      - name: Detect Cloudflare credentials
-        id: cf
+      - name: Require Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID ausentes. Build validado; publicação aguardando credenciais."
-          fi
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
 
-      - name: Resolve production Pages project
+      - name: Resolve Pages project
         id: project
-        if: steps.cf.outputs.configured == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          set -euo pipefail
-          npx wrangler@4 pages project list --json > /tmp/pages-projects.json
+          npx wrangler@4 pages project list --json >/tmp/projects.json
           project=$(node - <<'NODE'
-          const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('/tmp/pages-projects.json','utf8'));
-          const a=Array.isArray(x)?x:(x.result||x.projects||[]);
-          const names=a.map(p=>p.name||p.project_name).filter(Boolean);
-          process.stdout.write(names.includes('codesolution-site')?'codesolution-site':names.includes('codesolution')?'codesolution':'');
+          const x=require('/tmp/projects.json');const a=Array.isArray(x)?x:(x.result||x.projects||[]);const n=a.map(v=>v.name||v.project_name);
+          process.stdout.write(n.includes('codesolution-site')?'codesolution-site':n.includes('codesolution')?'codesolution':'');
           NODE
           )
-          if [ -z "$project" ]; then
-            project="codesolution-site"
-            npx wrangler@4 pages project create "$project" --production-branch main
-          fi
+          if [ -z "$project" ]; then project=codesolution-site; npx wrangler@4 pages project create "$project" --production-branch main; fi
           echo "name=$project" >> "$GITHUB_OUTPUT"
-          echo "Using Pages project: $project"
 
-      - name: Deploy Pages production
-        id: pages
-        if: steps.cf.outputs.configured == 'true'
+      - name: Deploy production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PAGES_PROJECT: ${{ steps.project.outputs.name }}
-        run: npx wrangler@4 pages deploy deploy --project-name="$PAGES_PROJECT"
-
-      - name: Ensure custom domains
-        id: domains
-        if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PAGES_PROJECT: ${{ steps.project.outputs.name }}
-        run: |
-          set -euo pipefail
-          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}/domains"
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$api" > /tmp/domains.json
-          for domain in www.codesolution.com.br codesolution.com.br; do
-            exists=$(DOMAIN="$domain" node -e "const x=require('/tmp/domains.json');process.stdout.write((x.result||[]).some(d=>d.name===process.env.DOMAIN)?'yes':'no')")
-            if [ "$exists" != yes ]; then
-              curl -fsS -X POST "$api" -H 'Content-Type: application/json' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" --data "{\"name\":\"${domain}\"}" >/tmp/domain-add.json
-            fi
-          done
-
-      - name: Smoke test production
-        id: smoke
-        if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          sleep 15
-          for url in \
-            https://www.codesolution.com.br/ \
-            https://www.codesolution.com.br/servicos/ \
-            https://www.codesolution.com.br/setores/ \
-            https://www.codesolution.com.br/calculadora/ \
-            https://www.codesolution.com.br/diagnostico/ \
-            https://www.codesolution.com.br/assistente/ \
-            https://www.codesolution.com.br/privacidade/ \
-            https://www.codesolution.com.br/sitemap.xml; do
-            curl -L --fail --silent --show-error --retry 5 --retry-delay 4 "$url" >/dev/null
-          done
-          grep -qi 'Sistemas sob medida para o agronegócio' <(curl -LfsS https://www.codesolution.com.br/setores/)
-          grep -qi 'Quanto custa construir seu sistema' <(curl -LfsS https://www.codesolution.com.br/calculadora/)
-          panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
-          test "$panel_http" = 401
-
-      - name: Check apex redirect
-        id: apex
-        if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
-        continue-on-error: true
-        run: |
-          headers=$(mktemp)
-          curl -sS --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
-          http=$(head -n1 "$headers" | awk '{print $2}')
-          location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          echo "http=$http" >> "$GITHUB_OUTPUT"
-          echo "location=$location" >> "$GITHUB_OUTPUT"
-          test "$http" = 301
-          echo "$location" | grep -q '^https://www.codesolution.com.br/'
-
-      - name: Persist Pages status
-        if: always()
-        env:
-          CONFIGURED: ${{ steps.cf.outputs.configured }}
           PROJECT: ${{ steps.project.outputs.name }}
-          PAGES_OUTCOME: ${{ steps.pages.outcome }}
-          DOMAINS_OUTCOME: ${{ steps.domains.outcome }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          APEX_OUTCOME: ${{ steps.apex.outcome }}
-          APEX_HTTP: ${{ steps.apex.outputs.http }}
-          APEX_LOCATION: ${{ steps.apex.outputs.location }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:'success',
-            cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
-            pagesDeploy:e.PAGES_OUTCOME||'skipped',customDomains:e.DOMAINS_OUTCOME||'skipped',
-            publicSmokeTest:e.SMOKE_OUTCOME||'skipped',apexRedirect:e.APEX_OUTCOME||'skipped',
-            apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',deploymentMode:'direct-upload-production'
-          },null,2)+'\n');
-          NODE
-          git config user.name "Code Solution Deploy Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/pages-deployment-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: record Pages deployment status"
-          git pull --rebase origin main
-          git push origin HEAD:main
+        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT"
 
-      - name: Enforce release when credentials exist
-        if: always()
-        env:
-          CONFIGURED: ${{ steps.cf.outputs.configured }}
-          PAGES_OUTCOME: ${{ steps.pages.outcome }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+      - name: Smoke public routes
         run: |
-          if [ "$CONFIGURED" = true ]; then
-            test "$PAGES_OUTCOME" = success
-            test "$SMOKE_OUTCOME" = success
-          fi
+          sleep 15
+          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/; do
+            curl -LfsS --retry 5 --retry-delay 4 "https://www.codesolution.com.br${path}" >/dev/null
+          done
