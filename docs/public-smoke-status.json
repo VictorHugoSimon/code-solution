@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-23T18:24:35.673Z",
-  "sourceCommit": "e650669071410c83284c5860d4b2653c741722f4",
+  "checkedAt": "2026-08-23T18:47:22.535Z",
+  "sourceCommit": "de32802b9f7ac68f04b96540c67ccbcfd12b4c87",
   "cloudflareSecretsConfigured": "false",
   "cloudflareApiTokenPresent": "false",
   "cloudflareAccountIdPresent": "false",
@@ -21,8 +21,11 @@
   "contentWorkerReady": "",
   "attendantWorkerHealth": "success",
   "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health",
+  "attendantStorage": "",
   "attendantChat": "failed",
   "attendantChatHttp": "500",
   "attendantChatError": "TypeError:Cannotreadpropertiesofundefinedreading0",
-  "attendantStorage": ""
+  "attendantLeadValidation": "failed",
+  "attendantLeadValidationHttp": "200",
+  "attendantLeadValidationError": ""
 }
