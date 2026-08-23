@@ -27,6 +27,7 @@ O token deve ter acesso suficiente aos recursos da Code Solution usados pelos wo
 - testa os dois `/health`;
 - exige o robô de conteúdo pronto e identificado por build;
 - testa uma conversa empresarial não sensível com o Codi;
+- testa o contrato de `/lead` com payload inválido e exige rejeição antes de qualquer gravação;
 - confirma que `/crm/summary` rejeita acesso não autenticado;
 - grava `docs/deployment-status.json`.
 
@@ -53,6 +54,7 @@ O token deve ter acesso suficiente aos recursos da Code Solution usados pelos wo
 - testa os dois Workers;
 - executa uma conversa não sensível com o Codi;
 - registra o tipo de storage do atendente;
+- só testa `/lead` quando o health confirmar `storage=d1`, evitando efeitos sobre Worker legado;
 - grava `docs/public-smoke-status.json`.
 
 ## 3. Runtime secrets no Cloudflare
@@ -84,7 +86,7 @@ Esses valores também podem existir como GitHub Actions Secrets para sincroniza�
 - `crmD1Provision = success`;
 - `contentWorkerDeploy = success`;
 - `attendantWorkerDeploy = success`;
-- `publicHealthAndChatSmokeTest = success`.
+- `publicHealthChatAndLeadSmokeTest = success`.
 
 `docs/pages-deployment-status.json`
 - `build = success`;
@@ -108,6 +110,7 @@ Esses valores também podem existir como GitHub Actions Secrets para sincroniza�
 - `contentWorkerReady = true`;
 - `attendantWorkerHealth = success`;
 - `attendantChat = success`;
+- `attendantLeadValidation = success`;
 - `attendantStorage = d1`.
 
 ## 5. Codi e CRM
