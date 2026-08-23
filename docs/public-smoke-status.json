@@ -1,9 +1,9 @@
 {
-  "checkedAt": "2026-08-23T19:02:56.044Z",
-  "sourceCommit": "629cb9eca8869d7b3e5e2ed8e9c1a68685715e37",
+  "checkedAt": "2026-08-23T19:29:17.961Z",
+  "sourceCommit": "99e4982b41f298d6dd3609537c0d17ffd88afc0d",
   "cloudflareSecretsConfigured": "false",
   "cloudflareApiTokenPresent": "false",
-  "cloudflareAccountIdPresent": "false",
+  "cloudflareAccountIdPresent": "true",
   "home": "success",
   "services": "success",
   "homeLeadCapture": "failed",
