@@ -25,25 +25,34 @@ O token deve ter acesso suficiente aos recursos da Code Solution usados pelos wo
 - publica `code-solution-robo`;
 - publica `code-solution-atendente` com binding `CRM_DB`;
 - testa os dois `/health`;
-- exige o build `commercial-engine-2026-08-22.2` no robô;
+- exige o robô de conteúdo pronto e identificado por build;
+- testa uma conversa empresarial não sensível com o Codi;
+- confirma que `/crm/summary` rejeita acesso não autenticado;
 - grava `docs/deployment-status.json`.
 
 ### Deploy Cloudflare Pages
 - reconstrói índice do blog;
-- gera páginas PT/EN/ES;
-- prepara fallback SEO/AEO e headers;
+- gera páginas estáticas PT/EN/ES;
+- prepara SEO/AEO e headers;
 - publica `deploy/` no projeto Pages `codesolution-site`;
 - testa Home, robots, sitemap e artigo estático;
+- testa `/diagnostico/`, `/assistente/`, `/privacidade/`, `/setores/` e `/calculadora/`;
+- confirma que `/painel/crm/` e `/api/crm/summary` exigem autenticação;
 - grava `docs/pages-deployment-status.json`.
 
 ### Public production smoke
-- testa Home;
+- testa Home e Serviços;
 - testa artigo estático;
 - testa `/diagnostico/`;
 - testa `/assistente/`;
+- testa `/privacidade/`;
+- testa `/setores/`;
+- testa `/calculadora/`;
+- verifica redirect canônico do domínio sem `www`;
 - resolve o subdomínio Workers.dev ativo;
 - testa os dois Workers;
 - executa uma conversa não sensível com o Codi;
+- registra o tipo de storage do atendente;
 - grava `docs/public-smoke-status.json`.
 
 ## 3. Runtime secrets no Cloudflare
@@ -54,13 +63,16 @@ Confirmar no Cloudflare:
 - `AI_API_KEY`
 - `GITHUB_TOKEN`
 - `MANUAL_KEY`
-- opcionais: `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`
+
+Para artigos comuns, a descoberta/indexação é feita por sitemap e crawl. A Google Indexing API não faz parte da operação normal do blog.
 
 ### Worker `code-solution-atendente`
 Confirmar no Cloudflare:
 - `AI_API_KEY`
 - `CRM_ADMIN_KEY`
 - opcionais para notificação: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `OWNER_WHATSAPP`
+
+Esses valores também podem existir como GitHub Actions Secrets para sincronização automática no deploy, sem serem expostos no código.
 
 ## 4. Critério de aceite
 
@@ -72,21 +84,48 @@ Confirmar no Cloudflare:
 - `crmD1Provision = success`;
 - `contentWorkerDeploy = success`;
 - `attendantWorkerDeploy = success`;
-- `publicHealthSmokeTest = success`.
+- `publicHealthAndChatSmokeTest = success`.
 
 `docs/pages-deployment-status.json`
 - `build = success`;
 - `cloudflareSecretsConfigured = true`;
+- `projectLookup = success`;
 - `pagesDeploy = success`;
-- `publicSmokeTest = success`.
+- `publicSmokeTest = success`;
+- `panelEdgeAuthRequired = true`.
 
 `docs/public-smoke-status.json`
-- Home, artigo, diagnóstico e assistente = `success`;
-- Workers = `success`;
-- `contentWorkerBuild = commercial-engine-2026-08-22.2`;
+- `home = success`;
+- `services = success`;
+- `staticArticle = success`;
+- `diagnosticLanding = success`;
+- `standaloneAssistant = success`;
+- `privacyPage = success`;
+- `sectorsPage = success`;
+- `calculatorPage = success`;
+- `apexCanonicalRedirect = success`;
+- `contentWorkerHealth = success`;
+- `contentWorkerReady = true`;
+- `attendantWorkerHealth = success`;
 - `attendantChat = success`;
 - `attendantStorage = d1`.
 
-## 5. Pendências que exigem identificador externo
+## 5. Codi e CRM
+Na rota `/assistente/`:
+- conversa começa somente após ação voluntária do usuário;
+- o usuário é orientado a não enviar dados sensíveis;
+- após informar a necessidade, pode registrar voluntariamente nome, WhatsApp, empresa, segmento e necessidade;
+- o cadastro exige consentimento explícito;
+- UTM, landing page e referrer são enviados como contexto de aquisição;
+- o endpoint `/lead` cria o registro e devolve `leadId`, score, status e próxima ação;
+- o painel `/painel/crm/` opera sobre o mesmo backend via proxy autenticado `/api/crm/*`.
+
+## 6. Domínio canônico
+O Pages Worker está preparado para responder com 301 quando o host for `codesolution.com.br`, preservando caminho e query string e direcionando para `https://www.codesolution.com.br`.
+
+Para o redirect funcionar publicamente, o domínio raiz precisa estar roteado para o mesmo projeto/edge da Code Solution. O smoke público só considera concluído quando recebe HTTP 301 com `Location` correto.
+
+## 7. Pendências que exigem identificador externo
 - Meta Pixel: instalar apenas quando o Pixel ID oficial da conta Meta Business for obtido.
-- Proteção de acesso aos painéis: preferir Cloudflare Access; manter `noindex`/`no-store` como camada complementar, não como autenticação.
+- Google Perfil da Empresa: cadastro/otimização depende da conta empresarial correspondente.
+- WhatsApp Cloud API: notificações automáticas dependem das credenciais oficiais da conta Meta/WhatsApp.
