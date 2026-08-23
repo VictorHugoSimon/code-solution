@@ -1,8 +1,16 @@
 const ATTENDANT = 'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev';
+const CANONICAL_HOST = 'www.codesolution.com.br';
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.hostname === 'codesolution.com.br') {
+      url.hostname = CANONICAL_HOST;
+      url.protocol = 'https:';
+      return Response.redirect(url.toString(), 301);
+    }
+
     const isPanel = url.pathname === '/painel' || url.pathname.startsWith('/painel/');
     const isCrmApi = url.pathname === '/api/crm' || url.pathname.startsWith('/api/crm/');
 
@@ -55,6 +63,7 @@ function secureResponse(source, { panel = false } = {}) {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   if (panel) {
     response.headers.set('Cache-Control', 'no-store');
     response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
