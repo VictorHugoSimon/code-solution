@@ -7,7 +7,8 @@
     "blog:check": "node scripts/rebuild-blog-index.mjs --check",
     "blog:static": "node scripts/build-static-blog.mjs",
     "pages:prepare": "node scripts/prepare-pages.mjs",
-    "check:workers": "node --check robo/worker.js && node --check robo/atendente-worker.js && node --check deploy/_worker.js",
+    "check:codi-crm": "node scripts/check-codi-crm-contract.mjs",
+    "check:workers": "node --check robo/worker.js && node --check robo/atendente-worker.js && node --check deploy/_worker.js && npm run check:codi-crm",
     "check:crm-schema": "python3 scripts/check-crm-schema.py",
     "check": "npm run check:workers && npm run check:crm-schema && npm run blog:index && npm run blog:static && npm run pages:prepare"
   }
