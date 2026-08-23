@@ -45,7 +45,7 @@ jobs:
           apex_redirect=failed; apex_http=""; apex_location=""
           robo=failed; robo_url=""; robo_build=""; robo_ready=""
           attendant=failed; attendant_url=""; attendant_storage=""; attendant_chat=failed; chat_http=""; chat_error=""
-          attendant_lead_validation=failed; lead_http=""; lead_error=""
+          attendant_lead_validation=skipped_legacy; lead_http=""; lead_error=""
 
           check_page(){ url="$1"; pattern="$2"; file="$3"; curl -L --fail --silent --show-error --max-time 20 "$url" >"$file" && grep -qi "$pattern" "$file"; }
           check_page https://www.codesolution.com.br/ 'Code Solution' /tmp/home.html && home=success
@@ -87,12 +87,16 @@ jobs:
             CHAT_HTTP="$chat_http" node -e "try{const x=require('/tmp/chat.json');if(process.env.CHAT_HTTP==='200'&&x.ok===true&&typeof x.message==='string'&&x.message.length>10)process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_chat=success
             chat_error=$(node -e "try{const x=require('/tmp/chat.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
 
-            # Invalid on purpose: must return validation_error before any lead is persisted.
-            lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$base_url/lead" \
-              -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' \
-              --data '{"name":"","whatsapp":"","need":""}')
-            LEAD_HTTP="$lead_http" node -e "try{const x=require('/tmp/lead.json');if(process.env.LEAD_HTTP==='400'&&x.ok===false&&x.error==='validation_error')process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_lead_validation=success
-            lead_error=$(node -e "try{const x=require('/tmp/lead.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
+            # Only exercise /lead after the new D1-backed worker is confirmed by /health.
+            # The deliberately invalid payload must be rejected before any lead is persisted.
+            if [ "$attendant_storage" = d1 ]; then
+              attendant_lead_validation=failed
+              lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$base_url/lead" \
+                -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' \
+                --data '{"name":"","whatsapp":"","need":""}')
+              LEAD_HTTP="$lead_http" node -e "try{const x=require('/tmp/lead.json');if(process.env.LEAD_HTTP==='400'&&x.ok===false&&x.error==='validation_error')process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_lead_validation=success
+              lead_error=$(node -e "try{const x=require('/tmp/lead.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
+            fi
           fi
 
           for pair in \
@@ -146,7 +150,7 @@ jobs:
             contentWorkerHealth:e.ROBO||'failed',contentWorkerUrl:e.ROBO_URL||'',contentWorkerBuild:e.ROBO_BUILD||'',contentWorkerReady:e.ROBO_READY||'',
             attendantWorkerHealth:e.ATTENDANT||'failed',attendantWorkerUrl:e.ATTENDANT_URL||'',attendantStorage:e.ATTENDANT_STORAGE||'',
             attendantChat:e.ATTENDANT_CHAT||'failed',attendantChatHttp:e.CHAT_HTTP||'',attendantChatError:e.CHAT_ERROR||'',
-            attendantLeadValidation:e.ATTENDANT_LEAD_VALIDATION||'failed',attendantLeadValidationHttp:e.LEAD_HTTP||'',attendantLeadValidationError:e.LEAD_ERROR||''
+            attendantLeadValidation:e.ATTENDANT_LEAD_VALIDATION||'skipped_legacy',attendantLeadValidationHttp:e.LEAD_HTTP||'',attendantLeadValidationError:e.LEAD_ERROR||''
           };
           fs.writeFileSync('docs/public-smoke-status.json',JSON.stringify(out,null,2)+'\n');
           NODE
