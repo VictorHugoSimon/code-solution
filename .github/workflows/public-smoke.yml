@@ -43,8 +43,8 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          home=failed; services=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed; robo=failed; attendant=failed; attendant_chat=failed
-          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""; chat_http=""; chat_error=""; apex_http=""; apex_location=""; apex_redirect=failed
+          home=failed; services=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed; robo=failed; attendant=failed; attendant_chat=failed; attendant_lead_validation=failed
+          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""; chat_http=""; chat_error=""; lead_http=""; lead_error=""; apex_http=""; apex_location=""; apex_redirect=failed
 
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/servicos/ >/tmp/services.html && services=success
@@ -77,13 +77,21 @@ jobs:
           fi
           if [ "$attendant" = success ]; then
             attendant_storage=$(node -e "try{const x=require('/tmp/atendente.json');process.stdout.write(String(x.storage||''))}catch{}")
-            chat_url="${attendant_url%/health}/chat"
-            chat_http=$(curl --silent --show-error --max-time 35 -o /tmp/chat.json -w '%{http_code}' "$chat_url" \
+            base_url="${attendant_url%/health}"
+            chat_http=$(curl --silent --show-error --max-time 35 -o /tmp/chat.json -w '%{http_code}' "$base_url/chat" \
               -H 'content-type: application/json' \
               -H 'origin: https://www.codesolution.com.br' \
               --data '{"messages":[{"role":"user","content":"Olá. Quero entender como a Code Solution pode ajudar uma empresa com automação de processos."}],"context":{"source":"production_smoke","consent":true}}')
             node -e "try{const x=require('/tmp/chat.json'); if(x.ok===true && typeof x.message==='string' && x.message.length>10) process.exit(0); process.exit(1)}catch{process.exit(1)}" && attendant_chat=success
             chat_error=$(node -e "try{const x=require('/tmp/chat.json');const e=String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80);process.stdout.write(e)}catch{}")
+
+            # Contract-only test: deliberately invalid payload must be rejected before any lead is written.
+            lead_http=$(curl --silent --show-error --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$base_url/lead" \
+              -H 'content-type: application/json' \
+              -H 'origin: https://www.codesolution.com.br' \
+              --data '{"name":"","whatsapp":"","need":""}')
+            node -e "try{const x=require('/tmp/lead.json'); if(process.env.LEAD_HTTP==='400' && x.ok===false && x.error==='validation_error') process.exit(0); process.exit(1)}catch{process.exit(1)}" LEAD_HTTP="$lead_http" && attendant_lead_validation=success
+            lead_error=$(node -e "try{const x=require('/tmp/lead.json');const e=String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80);process.stdout.write(e)}catch{}")
           fi
 
           echo "home=$home" >> "$GITHUB_OUTPUT"
@@ -100,8 +108,11 @@ jobs:
           echo "robo=$robo" >> "$GITHUB_OUTPUT"
           echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
           echo "attendant_chat=$attendant_chat" >> "$GITHUB_OUTPUT"
+          echo "attendant_lead_validation=$attendant_lead_validation" >> "$GITHUB_OUTPUT"
           echo "chat_http=$chat_http" >> "$GITHUB_OUTPUT"
           echo "chat_error=$chat_error" >> "$GITHUB_OUTPUT"
+          echo "lead_http=$lead_http" >> "$GITHUB_OUTPUT"
+          echo "lead_error=$lead_error" >> "$GITHUB_OUTPUT"
           echo "robo_url=$robo_url" >> "$GITHUB_OUTPUT"
           echo "attendant_url=$attendant_url" >> "$GITHUB_OUTPUT"
           echo "robo_build=$robo_build" >> "$GITHUB_OUTPUT"
@@ -128,8 +139,11 @@ jobs:
           ROBO: ${{ steps.check.outputs.robo }}
           ATTENDANT: ${{ steps.check.outputs.attendant }}
           ATTENDANT_CHAT: ${{ steps.check.outputs.attendant_chat }}
+          ATTENDANT_LEAD_VALIDATION: ${{ steps.check.outputs.attendant_lead_validation }}
           CHAT_HTTP: ${{ steps.check.outputs.chat_http }}
           CHAT_ERROR: ${{ steps.check.outputs.chat_error }}
+          LEAD_HTTP: ${{ steps.check.outputs.lead_http }}
+          LEAD_ERROR: ${{ steps.check.outputs.lead_error }}
           ROBO_URL: ${{ steps.check.outputs.robo_url }}
           ATTENDANT_URL: ${{ steps.check.outputs.attendant_url }}
           ROBO_BUILD: ${{ steps.check.outputs.robo_build }}
@@ -167,6 +181,9 @@ jobs:
             attendantChat:e.ATTENDANT_CHAT||'failed',
             attendantChatHttp:e.CHAT_HTTP||'',
             attendantChatError:e.CHAT_ERROR||'',
+            attendantLeadValidation:e.ATTENDANT_LEAD_VALIDATION||'failed',
+            attendantLeadValidationHttp:e.LEAD_HTTP||'',
+            attendantLeadValidationError:e.LEAD_ERROR||'',
             attendantStorage:e.ATTENDANT_STORAGE||''
           };
           fs.writeFileSync('docs/public-smoke-status.json',JSON.stringify(out,null,2)+'\n');
