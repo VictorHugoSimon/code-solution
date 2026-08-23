@@ -74,7 +74,9 @@ jobs:
           test -f deploy/painel/crm/index.html
           test -f deploy/_worker.js
           node --check deploy/_worker.js
+          npm run check:bundled-surfaces
           grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
+          grep -q 'cs-home-lead-form' deploy/index.html
           grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
           grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
           grep -qi 'Diagnóstico Digital' deploy/diagnostico/index.html
@@ -159,6 +161,7 @@ jobs:
           npm run blog:index
           npm run blog:static
           npm run pages:prepare
+          npm run check:bundled-surfaces
           node --check deploy/_worker.js
           test -f deploy/setores/index.html
           test -f deploy/calculadora/index.html
@@ -237,6 +240,7 @@ jobs:
           for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
             curl -LfsS --retry 5 --retry-delay 4 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
+          curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
           curl -LfsS https://www.codesolution.com.br/setores/ | grep -qi 'Sistemas sob medida para o agronegócio'
           curl -LfsS https://www.codesolution.com.br/calculadora/ | grep -qi 'Quanto custa construir seu sistema'
           curl -LfsS https://www.codesolution.com.br/assistente/ | grep -qi 'Registrar e pedir retorno'
