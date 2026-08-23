@@ -9,8 +9,11 @@ on:
       - 'scripts/**'
       - 'robo/**'
       - 'crm/migrations/**'
+      - 'deploy/**'
       - 'package.json'
       - '.github/workflows/content-integrity.yml'
+      - '.github/workflows/deploy-pages.yml'
+      - '.github/workflows/deploy-workers.yml'
   workflow_dispatch:
 
 permissions:
@@ -29,7 +32,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Validate worker syntax
+      - name: Validate workers
         id: worker_check
         continue-on-error: true
         run: npm run check:workers
@@ -50,22 +53,41 @@ jobs:
         if: steps.blog_index.outcome == 'success'
         run: npm run blog:static
 
-      - name: Prepare Pages SEO/AEO and security
+      - name: Prepare Pages SEO AEO and security
         id: pages_prepare
         continue-on-error: true
         if: steps.static_blog.outcome == 'success'
         run: npm run pages:prepare
 
-      - name: Commit generated web artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.blog_index.outcome == 'success' && steps.static_blog.outcome == 'success' && steps.pages_prepare.outcome == 'success'
+      - name: Validate all production surfaces
+        id: surfaces
+        continue-on-error: true
+        if: steps.pages_prepare.outcome == 'success'
+        run: |
+          test -f deploy/index.html
+          test -f deploy/servicos/index.html
+          test -f deploy/setores/index.html
+          test -f deploy/calculadora/index.html
+          test -f deploy/diagnostico/index.html
+          test -f deploy/assistente/index.html
+          test -f deploy/privacidade/index.html
+          test -f deploy/painel/crm/index.html
+          test -f deploy/_worker.js
+          node --check deploy/_worker.js
+          grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
+          grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
+          grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
+          grep -qi 'Diagnóstico Digital' deploy/diagnostico/index.html
+          grep -qi 'Codi' deploy/assistente/index.html
+          grep -qi 'Privacidade' deploy/privacidade/index.html
+
+      - name: Commit generated artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.surfaces.outcome == 'success'
         run: |
           git config user.name "Code Solution Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add content/blog/index.json deploy/blog deploy/en/blog deploy/es/blog deploy/sitemap.xml deploy/index.html deploy/servicos/index.html deploy/painel deploy/_headers
-          if git diff --cached --quiet; then
-            echo "Generated web artifacts are current"
-            exit 0
-          fi
+          git add content/blog/index.json deploy/blog deploy/en/blog deploy/es/blog deploy/sitemap.xml deploy/index.html deploy/servicos/index.html deploy/_headers
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: rebuild crawlable Pages bundle"
           git pull --rebase origin main
           git push origin HEAD:main
@@ -78,20 +100,19 @@ jobs:
           BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
           STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
           PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
+          SURFACES_OUTCOME: ${{ steps.surfaces.outcome }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
-          cat > docs/content-integrity-status.json <<EOF
-          {
-            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "sourceCommit": "$SOURCE_SHA",
-            "workerSyntax": "$WORKER_OUTCOME",
-            "crmSchema": "$SCHEMA_OUTCOME",
-            "blogIndexBuild": "$BLOG_OUTCOME",
-            "staticBlogBuild": "$STATIC_OUTCOME",
-            "pagesPreparation": "$PAGES_OUTCOME"
-          }
-          EOF
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/content-integrity-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            workerSyntax:e.WORKER_OUTCOME,crmSchema:e.SCHEMA_OUTCOME,
+            blogIndexBuild:e.BLOG_OUTCOME,staticBlogBuild:e.STATIC_OUTCOME,
+            pagesPreparation:e.PAGES_OUTCOME,productionSurfaces:e.SURFACES_OUTCOME
+          },null,2)+'\n');
+          NODE
           git config user.name "Code Solution CI Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/content-integrity-status.json
@@ -108,9 +129,11 @@ jobs:
           BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
           STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
           PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
+          SURFACES_OUTCOME: ${{ steps.surfaces.outcome }}
         run: |
-          test "$WORKER_OUTCOME" = "success"
-          test "$SCHEMA_OUTCOME" = "success"
-          test "$BLOG_OUTCOME" = "success"
-          test "$STATIC_OUTCOME" = "success"
-          test "$PAGES_OUTCOME" = "success"
+          test "$WORKER_OUTCOME" = success
+          test "$SCHEMA_OUTCOME" = success
+          test "$BLOG_OUTCOME" = success
+          test "$STATIC_OUTCOME" = success
+          test "$PAGES_OUTCOME" = success
+          test "$SURFACES_OUTCOME" = success
