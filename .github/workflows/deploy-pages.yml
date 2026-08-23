@@ -48,8 +48,12 @@ jobs:
           node --check deploy/_worker.js
           grep -q 'BlogPosting' deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
           grep -q 'SEO-FALLBACK:START' deploy/index.html
+          grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
+          grep -q 'O que as empresas perguntam antes de contratar' deploy/index.html
+          grep -q 'cs-services-aeo' deploy/servicos/index.html
           grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
           grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
+          grep -q "url.hostname === 'codesolution.com.br'" deploy/_worker.js
 
       - name: Validate Cloudflare credentials
         id: cf
@@ -100,6 +104,7 @@ jobs:
         run: |
           sleep 15
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/ >/tmp/home.html
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/servicos/ >/tmp/servicos.html
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/robots.txt >/tmp/robots.txt
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/sitemap.xml >/tmp/sitemap.xml
           curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html
@@ -117,12 +122,28 @@ jobs:
           grep -qi "Privacidade" /tmp/privacidade.html
           grep -qi "Sistemas sob medida para o agronegócio" /tmp/setores.html
           grep -qi "Quanto custa construir seu sistema" /tmp/calculadora.html
+          grep -qi "O que as empresas perguntam antes de contratar" /tmp/home.html
+          grep -qi "Software, automação, IA e dados sob medida" /tmp/servicos.html
           grep -qi "Sitemap:" /tmp/robots.txt
           grep -qi "/diagnostico/" /tmp/sitemap.xml
           grep -qi "/setores/" /tmp/sitemap.xml
           grep -qi "/calculadora/" /tmp/sitemap.xml
           test "$panel_http" = "401"
           test "$api_http" = "401"
+
+      - name: Check apex canonical redirect
+        id: apex
+        if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
+        continue-on-error: true
+        run: |
+          headers=$(mktemp)
+          curl --silent --show-error --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
+          status=$(head -n1 "$headers" | awk '{print $2}')
+          location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          echo "http=$status" >> "$GITHUB_OUTPUT"
+          echo "location=$location" >> "$GITHUB_OUTPUT"
+          test "$status" = "301"
+          echo "$location" | grep -q '^https://www.codesolution.com.br/'
 
       - name: Persist Pages deployment status
         if: always()
@@ -132,23 +153,31 @@ jobs:
           PROJECT_OUTCOME: ${{ steps.project.outcome }}
           PAGES_OUTCOME: ${{ steps.pages.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          APEX_OUTCOME: ${{ steps.apex.outcome }}
+          APEX_HTTP: ${{ steps.apex.outputs.http }}
+          APEX_LOCATION: ${{ steps.apex.outputs.location }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
-          cat > docs/pages-deployment-status.json <<EOF
-          {
-            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "sourceCommit": "$SOURCE_SHA",
-            "build": "${BUILD_OUTCOME:-skipped}",
-            "cloudflareSecretsConfigured": "${CONFIGURED:-false}",
-            "projectLookup": "${PROJECT_OUTCOME:-skipped}",
-            "pagesDeploy": "${PAGES_OUTCOME:-skipped}",
-            "publicSmokeTest": "${SMOKE_OUTCOME:-skipped}",
-            "panelEdgeAuthRequired": true,
-            "project": "codesolution-site",
-            "deploymentMode": "direct-upload-production"
-          }
-          EOF
+          node - <<'NODE'
+          const fs=require('fs');
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:process.env.SOURCE_SHA,
+            build:process.env.BUILD_OUTCOME||'skipped',
+            cloudflareSecretsConfigured:process.env.CONFIGURED||'false',
+            projectLookup:process.env.PROJECT_OUTCOME||'skipped',
+            pagesDeploy:process.env.PAGES_OUTCOME||'skipped',
+            publicSmokeTest:process.env.SMOKE_OUTCOME||'skipped',
+            apexRedirect:process.env.APEX_OUTCOME||'skipped',
+            apexHttp:process.env.APEX_HTTP||'',
+            apexLocation:process.env.APEX_LOCATION||'',
+            panelEdgeAuthRequired:true,
+            project:'codesolution-site',
+            deploymentMode:'direct-upload-production'
+          };
+          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
           git config user.name "Code Solution Deploy Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/pages-deployment-status.json
