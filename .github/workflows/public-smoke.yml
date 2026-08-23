@@ -41,7 +41,7 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          home=failed; services=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed
+          home=failed; services=failed; home_lead=failed; services_aeo=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed
           apex_redirect=failed; apex_http=""; apex_location=""
           robo=failed; robo_url=""; robo_build=""; robo_ready=""
           attendant=failed; attendant_url=""; attendant_storage=""; attendant_chat=failed; chat_http=""; chat_error=""
@@ -50,6 +50,8 @@ jobs:
           check_page(){ url="$1"; pattern="$2"; file="$3"; curl -L --fail --silent --show-error --max-time 20 "$url" >"$file" && grep -qi "$pattern" "$file"; }
           check_page https://www.codesolution.com.br/ 'Code Solution' /tmp/home.html && home=success
           check_page https://www.codesolution.com.br/servicos/ 'Servi' /tmp/services.html && services=success
+          [ "$home" = success ] && grep -q 'cs-home-lead-form' /tmp/home.html && home_lead=success
+          [ "$services" = success ] && grep -q 'cs-services-aeo' /tmp/services.html && services_aeo=success
           check_page https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ 'Cibersegurança e LGPD' /tmp/article.html && article=success
           check_page https://www.codesolution.com.br/diagnostico/ 'Diagnóstico Digital' /tmp/diagnostico.html && diagnosis=success
           check_page https://www.codesolution.com.br/assistente/ 'Codi' /tmp/assistente.html && assistant=success
@@ -87,8 +89,6 @@ jobs:
             CHAT_HTTP="$chat_http" node -e "try{const x=require('/tmp/chat.json');if(process.env.CHAT_HTTP==='200'&&x.ok===true&&typeof x.message==='string'&&x.message.length>10)process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_chat=success
             chat_error=$(node -e "try{const x=require('/tmp/chat.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
 
-            # Only exercise /lead after the new D1-backed worker is confirmed by /health.
-            # The deliberately invalid payload must be rejected before any lead is persisted.
             if [ "$attendant_storage" = d1 ]; then
               attendant_lead_validation=failed
               lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$base_url/lead" \
@@ -100,7 +100,7 @@ jobs:
           fi
 
           for pair in \
-            "home=$home" "services=$services" "article=$article" "diagnosis=$diagnosis" "assistant=$assistant" "privacy=$privacy" \
+            "home=$home" "services=$services" "home_lead=$home_lead" "services_aeo=$services_aeo" "article=$article" "diagnosis=$diagnosis" "assistant=$assistant" "privacy=$privacy" \
             "sectors=$sectors" "calculator=$calculator" "apex_redirect=$apex_redirect" "apex_http=$apex_http" "apex_location=$apex_location" \
             "robo=$robo" "robo_url=$robo_url" "robo_build=$robo_build" "robo_ready=$robo_ready" \
             "attendant=$attendant" "attendant_url=$attendant_url" "attendant_storage=$attendant_storage" \
@@ -115,6 +115,8 @@ jobs:
           CF_ACCOUNT_PRESENT: ${{ steps.credentials.outputs.account_present }}
           HOME: ${{ steps.check.outputs.home }}
           SERVICES: ${{ steps.check.outputs.services }}
+          HOME_LEAD: ${{ steps.check.outputs.home_lead }}
+          SERVICES_AEO: ${{ steps.check.outputs.services_aeo }}
           ARTICLE: ${{ steps.check.outputs.article }}
           DIAGNOSIS: ${{ steps.check.outputs.diagnosis }}
           ASSISTANT: ${{ steps.check.outputs.assistant }}
@@ -145,7 +147,8 @@ jobs:
           const out={
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             cloudflareSecretsConfigured:e.CF_CONFIGURED||'false',cloudflareApiTokenPresent:e.CF_TOKEN_PRESENT||'false',cloudflareAccountIdPresent:e.CF_ACCOUNT_PRESENT||'false',
-            home:e.HOME||'failed',services:e.SERVICES||'failed',staticArticle:e.ARTICLE||'failed',diagnosticLanding:e.DIAGNOSIS||'failed',standaloneAssistant:e.ASSISTANT||'failed',privacyPage:e.PRIVACY||'failed',sectorsPage:e.SECTORS||'failed',calculatorPage:e.CALCULATOR||'failed',
+            home:e.HOME||'failed',services:e.SERVICES||'failed',homeLeadCapture:e.HOME_LEAD||'failed',servicesAeo:e.SERVICES_AEO||'failed',
+            staticArticle:e.ARTICLE||'failed',diagnosticLanding:e.DIAGNOSIS||'failed',standaloneAssistant:e.ASSISTANT||'failed',privacyPage:e.PRIVACY||'failed',sectorsPage:e.SECTORS||'failed',calculatorPage:e.CALCULATOR||'failed',
             apexCanonicalRedirect:e.APEX_REDIRECT||'failed',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
             contentWorkerHealth:e.ROBO||'failed',contentWorkerUrl:e.ROBO_URL||'',contentWorkerBuild:e.ROBO_BUILD||'',contentWorkerReady:e.ROBO_READY||'',
             attendantWorkerHealth:e.ATTENDANT||'failed',attendantWorkerUrl:e.ATTENDANT_URL||'',attendantStorage:e.ATTENDANT_STORAGE||'',
