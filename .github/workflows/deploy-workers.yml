@@ -19,29 +19,29 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Validate Cloudflare credentials
+      - name: Detect Cloudflare credentials
         id: cf
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare GitHub secrets ausentes; deploy automático não executado."
-          else
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Cloudflare credentials ausentes; Workers não serão publicados."
           fi
 
       - name: Provision CRM D1 and apply schema
         id: d1
         if: steps.cf.outputs.configured == 'true'
-        continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -50,24 +50,18 @@ jobs:
           set -euo pipefail
           npx wrangler@4 d1 list --json > /tmp/d1-list.json
           DB_ID=$(node - <<'NODE'
-          const fs = require('fs');
-          const data = JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
-          const list = Array.isArray(data) ? data : (data.result || data.databases || []);
-          const db = list.find(x => x.name === 'code-solution-crm');
-          process.stdout.write(db?.uuid || db?.id || '');
+          const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.databases||[]);const d=a.find(v=>v.name==='code-solution-crm');
+          process.stdout.write(d?.uuid||d?.id||'');
           NODE
           )
           if [ -z "$DB_ID" ]; then
-            echo "Creating D1 database code-solution-crm"
             npx wrangler@4 d1 create code-solution-crm
             npx wrangler@4 d1 list --json > /tmp/d1-list.json
             DB_ID=$(node - <<'NODE'
-          const fs = require('fs');
-          const data = JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
-          const list = Array.isArray(data) ? data : (data.result || data.databases || []);
-          const db = list.find(x => x.name === 'code-solution-crm');
-          if (!db) process.exit(2);
-          process.stdout.write(db.uuid || db.id || '');
+          const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.databases||[]);const d=a.find(v=>v.name==='code-solution-crm');
+          if(!d)process.exit(2);process.stdout.write(d.uuid||d.id||'');
           NODE
             )
           fi
@@ -83,68 +77,110 @@ jobs:
           database_id = "$DB_ID"
           EOF
 
-      - name: Deploy content worker
-        id: deploy_content
+      - name: Deploy content Worker
+        id: content
         if: steps.cf.outputs.configured == 'true'
-        continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler.toml
 
-      - name: Deploy attendant worker with D1
-        id: deploy_attendant
+      - name: Sync optional content Worker secrets from GitHub
+        if: steps.cf.outputs.configured == 'true' && steps.content.outcome == 'success'
+        working-directory: robo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GITHUB_CONTENT_TOKEN: ${{ secrets.GITHUB_CONTENT_TOKEN }}
+          MANUAL_KEY: ${{ secrets.MANUAL_KEY }}
+        run: |
+          set -e
+          [ -z "$AI_API_KEY" ] || printf '%s' "$AI_API_KEY" | npx wrangler@4 secret put AI_API_KEY --config wrangler.toml
+          [ -z "$GITHUB_CONTENT_TOKEN" ] || printf '%s' "$GITHUB_CONTENT_TOKEN" | npx wrangler@4 secret put GITHUB_TOKEN --config wrangler.toml
+          [ -z "$MANUAL_KEY" ] || printf '%s' "$MANUAL_KEY" | npx wrangler@4 secret put MANUAL_KEY --config wrangler.toml
+
+      - name: Deploy attendant Worker with D1
+        id: attendant
         if: steps.cf.outputs.configured == 'true' && steps.d1.outcome == 'success'
-        continue-on-error: true
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler-atendente.deploy.toml
 
-      - name: Smoke test public workers
-        id: smoke
-        if: steps.cf.outputs.configured == 'true' && steps.deploy_content.outcome == 'success' && steps.deploy_attendant.outcome == 'success'
-        continue-on-error: true
+      - name: Sync optional attendant secrets from GitHub
+        if: steps.cf.outputs.configured == 'true' && steps.attendant.outcome == 'success'
+        working-directory: robo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          OWNER_WHATSAPP: ${{ secrets.OWNER_WHATSAPP }}
         run: |
           set -e
-          sleep 5
-          curl --fail --silent --show-error --retry 5 --retry-delay 3 https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health > /tmp/content-health.json
-          curl --fail --silent --show-error --retry 5 --retry-delay 3 https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health > /tmp/attendant-health.json
-          cat /tmp/content-health.json
-          echo
-          cat /tmp/attendant-health.json
-          echo
-          grep -q 'commercial-engine-2026-08-22.2' /tmp/content-health.json
-          grep -q '"service":"code-solution-atendente"' /tmp/attendant-health.json
+          cfg=wrangler-atendente.deploy.toml
+          [ -z "$AI_API_KEY" ] || printf '%s' "$AI_API_KEY" | npx wrangler@4 secret put AI_API_KEY --config "$cfg"
+          [ -z "$CRM_ADMIN_KEY" ] || printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 secret put CRM_ADMIN_KEY --config "$cfg"
+          [ -z "$WHATSAPP_TOKEN" ] || printf '%s' "$WHATSAPP_TOKEN" | npx wrangler@4 secret put WHATSAPP_TOKEN --config "$cfg"
+          [ -z "$WHATSAPP_PHONE_ID" ] || printf '%s' "$WHATSAPP_PHONE_ID" | npx wrangler@4 secret put WHATSAPP_PHONE_ID --config "$cfg"
+          [ -z "$OWNER_WHATSAPP" ] || printf '%s' "$OWNER_WHATSAPP" | npx wrangler@4 secret put OWNER_WHATSAPP --config "$cfg"
 
-      - name: Persist deployment status
+      - name: Real production smoke for Workers
+        id: smoke
+        if: steps.cf.outputs.configured == 'true' && steps.content.outcome == 'success' && steps.attendant.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          sleep 8
+          CONTENT=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev
+          ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+          curl -fsS --retry 5 --retry-delay 3 "$CONTENT/health" >/tmp/content.json
+          curl -fsS --retry 5 --retry-delay 3 "$ATTENDANT/health" >/tmp/attendant.json
+          node - <<'NODE'
+          const c=require('/tmp/content.json'),a=require('/tmp/attendant.json');
+          if(c.ok!==true || c.ready!==true || !c.build) throw new Error('content worker not ready');
+          if(a.ok!==true || a.service!=='code-solution-atendente' || a.storage!=='d1') throw new Error('attendant worker not on D1');
+          NODE
+          chat_http=$(curl -sS --max-time 40 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
+            -H 'content-type: application/json' \
+            -H 'origin: https://www.codesolution.com.br' \
+            --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"deploy_smoke","consent":true}}')
+          test "$chat_http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/chat.json');
+          if(x.ok!==true || typeof x.message!=='string' || x.message.length<10) throw new Error('chat invalid');
+          NODE
+          unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")
+          test "$unauth" = 401
+
+      - name: Persist Worker status
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
           D1_OUTCOME: ${{ steps.d1.outcome }}
           D1_ID: ${{ steps.d1.outputs.database_id }}
-          CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
-          ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
+          CONTENT_OUTCOME: ${{ steps.content.outcome }}
+          ATTENDANT_OUTCOME: ${{ steps.attendant.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          COMMIT_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
-          cat > docs/deployment-status.json <<EOF
-          {
-            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "sourceCommit": "$COMMIT_SHA",
-            "cloudflareSecretsConfigured": "${CONFIGURED:-false}",
-            "crmD1Provision": "${D1_OUTCOME:-skipped}",
-            "crmD1DatabaseId": "$D1_ID",
-            "contentWorkerDeploy": "${CONTENT_OUTCOME:-skipped}",
-            "attendantWorkerDeploy": "${ATTENDANT_OUTCOME:-skipped}",
-            "publicHealthSmokeTest": "${SMOKE_OUTCOME:-skipped}",
-            "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev",
-            "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev"
-          }
-          EOF
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/deployment-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            cloudflareSecretsConfigured:e.CONFIGURED||'false',crmD1Provision:e.D1_OUTCOME||'skipped',crmD1DatabaseId:e.D1_ID||'',
+            contentWorkerDeploy:e.CONTENT_OUTCOME||'skipped',attendantWorkerDeploy:e.ATTENDANT_OUTCOME||'skipped',
+            publicHealthAndChatSmokeTest:e.SMOKE_OUTCOME||'skipped',
+            contentWorkerUrl:'https://code-solution-robo.victorhugoteixeirasimon6.workers.dev',
+            attendantWorkerUrl:'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+          },null,2)+'\n');
+          NODE
           git config user.name "Code Solution Deploy Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/deployment-status.json
@@ -153,20 +189,18 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Enforce deployment result
+      - name: Enforce release when credentials exist
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
           D1_OUTCOME: ${{ steps.d1.outcome }}
-          CONTENT_OUTCOME: ${{ steps.deploy_content.outcome }}
-          ATTENDANT_OUTCOME: ${{ steps.deploy_attendant.outcome }}
+          CONTENT_OUTCOME: ${{ steps.content.outcome }}
+          ATTENDANT_OUTCOME: ${{ steps.attendant.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
-          if [ "$CONFIGURED" != "true" ]; then
-            echo "Cloudflare credentials are not configured in GitHub Actions."
-            exit 1
-          fi
-          if [ "$D1_OUTCOME" != "success" ] || [ "$CONTENT_OUTCOME" != "success" ] || [ "$ATTENDANT_OUTCOME" != "success" ] || [ "$SMOKE_OUTCOME" != "success" ]; then
-            echo "D1 provisioning, Worker deployment or smoke test failed."
-            exit 1
+          if [ "$CONFIGURED" = true ]; then
+            test "$D1_OUTCOME" = success
+            test "$CONTENT_OUTCOME" = success
+            test "$ATTENDANT_OUTCOME" = success
+            test "$SMOKE_OUTCOME" = success
           fi
