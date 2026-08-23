@@ -34,15 +34,16 @@ O token deve ter acesso suficiente aos recursos da Code Solution usados pelos wo
 ### Deploy Cloudflare Pages
 - reconstrói índice do blog;
 - gera páginas estáticas PT/EN/ES;
-- prepara SEO/AEO e headers;
+- injeta SEO/AEO e as superfícies comerciais no template que aparece após o `Unpacking`;
 - publica `deploy/` no projeto Pages `codesolution-site`;
-- testa Home, robots, sitemap e artigo estático;
+- testa Home, formulário de lead da Home, AEO de Serviços, robots, sitemap e artigo estático;
 - testa `/diagnostico/`, `/assistente/`, `/privacidade/`, `/setores/` e `/calculadora/`;
 - confirma que `/painel/crm/` e `/api/crm/summary` exigem autenticação;
 - grava `docs/pages-deployment-status.json`.
 
 ### Public production smoke
 - testa Home e Serviços;
+- confirma separadamente `homeLeadCapture` e `servicesAeo`;
 - testa artigo estático;
 - testa `/diagnostico/`;
 - testa `/assistente/`;
@@ -99,6 +100,8 @@ Esses valores também podem existir como GitHub Actions Secrets para sincroniza�
 `docs/public-smoke-status.json`
 - `home = success`;
 - `services = success`;
+- `homeLeadCapture = success`;
+- `servicesAeo = success`;
 - `staticArticle = success`;
 - `diagnosticLanding = success`;
 - `standaloneAssistant = success`;
@@ -122,6 +125,14 @@ Na rota `/assistente/`:
 - UTM, landing page e referrer são enviados como contexto de aquisição;
 - o endpoint `/lead` cria o registro e devolve `leadId`, score, status e próxima ação;
 - o painel `/painel/crm/` opera sobre o mesmo backend via proxy autenticado `/api/crm/*`.
+
+Na Home:
+- o formulário comercial também envia ao mesmo `/lead`;
+- exige nome, WhatsApp, necessidade e consentimento;
+- empresa é opcional;
+- preserva UTM, landing page e referrer;
+- registra evento `generate_lead` no GA4 após sucesso;
+- oferece Codi e WhatsApp como alternativas.
 
 ## 6. Domínio canônico
 O Pages Worker está preparado para responder com 301 quando o host for `codesolution.com.br`, preservando caminho e query string e direcionando para `https://www.codesolution.com.br`.
