@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-23T18:47:22.535Z",
-  "sourceCommit": "de32802b9f7ac68f04b96540c67ccbcfd12b4c87",
+  "checkedAt": "2026-08-23T18:49:25.468Z",
+  "sourceCommit": "c14e7ca5a1af837eb937d92734a6f775d9e969b8",
   "cloudflareSecretsConfigured": "false",
   "cloudflareApiTokenPresent": "false",
   "cloudflareAccountIdPresent": "false",
@@ -25,7 +25,7 @@
   "attendantChat": "failed",
   "attendantChatHttp": "500",
   "attendantChatError": "TypeError:Cannotreadpropertiesofundefinedreading0",
-  "attendantLeadValidation": "failed",
-  "attendantLeadValidationHttp": "200",
+  "attendantLeadValidation": "skipped_legacy",
+  "attendantLeadValidationHttp": "",
   "attendantLeadValidationError": ""
 }
