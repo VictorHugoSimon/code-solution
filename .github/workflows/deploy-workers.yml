@@ -146,6 +146,7 @@ jobs:
           if(c.ok!==true || c.ready!==true || !c.build) throw new Error('content worker not ready');
           if(a.ok!==true || a.service!=='code-solution-atendente' || a.storage!=='d1') throw new Error('attendant worker not on D1');
           NODE
+
           chat_http=$(curl -sS --max-time 40 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
             -H 'content-type: application/json' \
             -H 'origin: https://www.codesolution.com.br' \
@@ -155,6 +156,18 @@ jobs:
           const x=require('/tmp/chat.json');
           if(x.ok!==true || typeof x.message!=='string' || x.message.length<10) throw new Error('chat invalid');
           NODE
+
+          # Non-destructive lead contract check: invalid fields must be rejected before write.
+          lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" \
+            -H 'content-type: application/json' \
+            -H 'origin: https://www.codesolution.com.br' \
+            --data '{"name":"","whatsapp":"","need":""}')
+          test "$lead_http" = 400
+          node - <<'NODE'
+          const x=require('/tmp/lead.json');
+          if(x.ok!==false || x.error!=='validation_error') throw new Error('lead validation contract invalid');
+          NODE
+
           unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")
           test "$unauth" = 401
 
@@ -176,7 +189,7 @@ jobs:
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             cloudflareSecretsConfigured:e.CONFIGURED||'false',crmD1Provision:e.D1_OUTCOME||'skipped',crmD1DatabaseId:e.D1_ID||'',
             contentWorkerDeploy:e.CONTENT_OUTCOME||'skipped',attendantWorkerDeploy:e.ATTENDANT_OUTCOME||'skipped',
-            publicHealthAndChatSmokeTest:e.SMOKE_OUTCOME||'skipped',
+            publicHealthChatAndLeadSmokeTest:e.SMOKE_OUTCOME||'skipped',
             contentWorkerUrl:'https://code-solution-robo.victorhugoteixeirasimon6.workers.dev',
             attendantWorkerUrl:'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
           },null,2)+'\n');
