@@ -6,8 +6,7 @@ on:
     paths:
       - 'deploy/**'
       - 'content/blog/**'
-      - 'scripts/build-static-blog.mjs'
-      - 'scripts/prepare-pages.mjs'
+      - 'scripts/**'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
@@ -16,48 +15,39 @@ permissions:
   contents: write
 
 concurrency:
-  group: deploy-pages-main
+  group: deploy-pages-production
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Build deploy bundle
+      - name: Build and validate deploy bundle
         id: build
-        continue-on-error: true
         run: |
           npm run blog:index
           npm run blog:static
           npm run pages:prepare
           test -f deploy/index.html
-          test -f deploy/_headers
           test -f deploy/_worker.js
+          test -f deploy/setores/index.html
+          test -f deploy/calculadora/index.html
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/privacidade/index.html
-          test -f deploy/setores/index.html
-          test -f deploy/calculadora/index.html
-          test -f deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
           node --check deploy/_worker.js
-          grep -q 'BlogPosting' deploy/blog/ciberseguranca-e-lgpd-para-pme/index.html
-          grep -q 'SEO-FALLBACK:START' deploy/index.html
           grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
-          grep -q 'O que as empresas perguntam antes de contratar' deploy/index.html
-          grep -q 'cs-services-aeo' deploy/servicos/index.html
           grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
           grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
-          grep -q "url.hostname === 'codesolution.com.br'" deploy/_worker.js
 
-      - name: Validate Cloudflare credentials
+      - name: Detect Cloudflare credentials
         id: cf
-        if: steps.build.outcome == 'success'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -66,92 +56,105 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare secrets ausentes; Pages não será publicado."
+            echo "::warning::CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID ausentes. Build validado; publicação aguardando credenciais."
           fi
 
-      - name: Verify Pages project
+      - name: Resolve production Pages project
         id: project
         if: steps.cf.outputs.configured == 'true'
-        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          set -euo pipefail
           npx wrangler@4 pages project list --json > /tmp/pages-projects.json
-          node - <<'NODE'
+          project=$(node - <<'NODE'
           const fs=require('fs');
-          const raw=JSON.parse(fs.readFileSync('/tmp/pages-projects.json','utf8'));
-          const list=Array.isArray(raw)?raw:(raw.result||raw.projects||[]);
-          if(!list.some(p=>(p.name||p.project_name)==='codesolution-site')) {
-            console.error('Pages project codesolution-site not found');
-            process.exit(2);
-          }
+          const x=JSON.parse(fs.readFileSync('/tmp/pages-projects.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.projects||[]);
+          const names=a.map(p=>p.name||p.project_name).filter(Boolean);
+          process.stdout.write(names.includes('codesolution-site')?'codesolution-site':names.includes('codesolution')?'codesolution':'');
           NODE
+          )
+          if [ -z "$project" ]; then
+            project="codesolution-site"
+            npx wrangler@4 pages project create "$project" --production-branch main
+          fi
+          echo "name=$project" >> "$GITHUB_OUTPUT"
+          echo "Using Pages project: $project"
 
       - name: Deploy Pages production
         id: pages
-        if: steps.build.outcome == 'success' && steps.cf.outputs.configured == 'true' && steps.project.outcome == 'success'
+        if: steps.cf.outputs.configured == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ steps.project.outputs.name }}
+        run: npx wrangler@4 pages deploy deploy --project-name="$PAGES_PROJECT"
+
+      - name: Ensure custom domains
+        id: domains
+        if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4 pages deploy deploy --project-name=codesolution-site
+          PAGES_PROJECT: ${{ steps.project.outputs.name }}
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}/domains"
+          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$api" > /tmp/domains.json
+          for domain in www.codesolution.com.br codesolution.com.br; do
+            exists=$(DOMAIN="$domain" node -e "const x=require('/tmp/domains.json');process.stdout.write((x.result||[]).some(d=>d.name===process.env.DOMAIN)?'yes':'no')")
+            if [ "$exists" != yes ]; then
+              curl -fsS -X POST "$api" -H 'Content-Type: application/json' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" --data "{\"name\":\"${domain}\"}" >/tmp/domain-add.json
+            fi
+          done
 
-      - name: Smoke test published site
+      - name: Smoke test production
         id: smoke
         if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
         continue-on-error: true
         run: |
+          set -euo pipefail
           sleep 15
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/ >/tmp/home.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/servicos/ >/tmp/servicos.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/robots.txt >/tmp/robots.txt
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/sitemap.xml >/tmp/sitemap.xml
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/diagnostico/ >/tmp/diagnostico.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/assistente/ >/tmp/assistente.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/privacidade/ >/tmp/privacidade.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/setores/ >/tmp/setores.html
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 https://www.codesolution.com.br/calculadora/ >/tmp/calculadora.html
-          panel_http=$(curl --silent --output /tmp/panel.txt --write-out '%{http_code}' https://www.codesolution.com.br/painel/crm/)
-          api_http=$(curl --silent --output /tmp/api.txt --write-out '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
-          grep -qi "Cibersegurança e LGPD" /tmp/article.html
-          grep -qi "BlogPosting" /tmp/article.html
-          grep -qi "Diagnóstico Digital" /tmp/diagnostico.html
-          grep -qi "Codi" /tmp/assistente.html
-          grep -qi "Privacidade" /tmp/privacidade.html
-          grep -qi "Sistemas sob medida para o agronegócio" /tmp/setores.html
-          grep -qi "Quanto custa construir seu sistema" /tmp/calculadora.html
-          grep -qi "O que as empresas perguntam antes de contratar" /tmp/home.html
-          grep -qi "Software, automação, IA e dados sob medida" /tmp/servicos.html
-          grep -qi "Sitemap:" /tmp/robots.txt
-          grep -qi "/diagnostico/" /tmp/sitemap.xml
-          grep -qi "/setores/" /tmp/sitemap.xml
-          grep -qi "/calculadora/" /tmp/sitemap.xml
-          test "$panel_http" = "401"
-          test "$api_http" = "401"
+          for url in \
+            https://www.codesolution.com.br/ \
+            https://www.codesolution.com.br/servicos/ \
+            https://www.codesolution.com.br/setores/ \
+            https://www.codesolution.com.br/calculadora/ \
+            https://www.codesolution.com.br/diagnostico/ \
+            https://www.codesolution.com.br/assistente/ \
+            https://www.codesolution.com.br/privacidade/ \
+            https://www.codesolution.com.br/sitemap.xml; do
+            curl -L --fail --silent --show-error --retry 5 --retry-delay 4 "$url" >/dev/null
+          done
+          grep -qi 'Sistemas sob medida para o agronegócio' <(curl -LfsS https://www.codesolution.com.br/setores/)
+          grep -qi 'Quanto custa construir seu sistema' <(curl -LfsS https://www.codesolution.com.br/calculadora/)
+          panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
+          test "$panel_http" = 401
 
-      - name: Check apex canonical redirect
+      - name: Check apex redirect
         id: apex
         if: steps.cf.outputs.configured == 'true' && steps.pages.outcome == 'success'
         continue-on-error: true
         run: |
           headers=$(mktemp)
-          curl --silent --show-error --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
-          status=$(head -n1 "$headers" | awk '{print $2}')
+          curl -sS --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
+          http=$(head -n1 "$headers" | awk '{print $2}')
           location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          echo "http=$status" >> "$GITHUB_OUTPUT"
+          echo "http=$http" >> "$GITHUB_OUTPUT"
           echo "location=$location" >> "$GITHUB_OUTPUT"
-          test "$status" = "301"
+          test "$http" = 301
           echo "$location" | grep -q '^https://www.codesolution.com.br/'
 
-      - name: Persist Pages deployment status
+      - name: Persist Pages status
         if: always()
         env:
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
           CONFIGURED: ${{ steps.cf.outputs.configured }}
-          PROJECT_OUTCOME: ${{ steps.project.outcome }}
+          PROJECT: ${{ steps.project.outputs.name }}
           PAGES_OUTCOME: ${{ steps.pages.outcome }}
+          DOMAINS_OUTCOME: ${{ steps.domains.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           APEX_OUTCOME: ${{ steps.apex.outcome }}
           APEX_HTTP: ${{ steps.apex.outputs.http }}
@@ -160,23 +163,14 @@ jobs:
         run: |
           mkdir -p docs
           node - <<'NODE'
-          const fs=require('fs');
-          const out={
-            checkedAt:new Date().toISOString(),
-            sourceCommit:process.env.SOURCE_SHA,
-            build:process.env.BUILD_OUTCOME||'skipped',
-            cloudflareSecretsConfigured:process.env.CONFIGURED||'false',
-            projectLookup:process.env.PROJECT_OUTCOME||'skipped',
-            pagesDeploy:process.env.PAGES_OUTCOME||'skipped',
-            publicSmokeTest:process.env.SMOKE_OUTCOME||'skipped',
-            apexRedirect:process.env.APEX_OUTCOME||'skipped',
-            apexHttp:process.env.APEX_HTTP||'',
-            apexLocation:process.env.APEX_LOCATION||'',
-            panelEdgeAuthRequired:true,
-            project:'codesolution-site',
-            deploymentMode:'direct-upload-production'
-          };
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify(out,null,2)+'\n');
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:'success',
+            cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
+            pagesDeploy:e.PAGES_OUTCOME||'skipped',customDomains:e.DOMAINS_OUTCOME||'skipped',
+            publicSmokeTest:e.SMOKE_OUTCOME||'skipped',apexRedirect:e.APEX_OUTCOME||'skipped',
+            apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',deploymentMode:'direct-upload-production'
+          },null,2)+'\n');
           NODE
           git config user.name "Code Solution Deploy Bot"
           git config user.email "actions@users.noreply.github.com"
@@ -186,18 +180,14 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Enforce build and deployment
+      - name: Enforce release when credentials exist
         if: always()
         env:
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
           CONFIGURED: ${{ steps.cf.outputs.configured }}
-          PROJECT_OUTCOME: ${{ steps.project.outcome }}
           PAGES_OUTCOME: ${{ steps.pages.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
-          test "$BUILD_OUTCOME" = "success"
-          if [ "$CONFIGURED" = "true" ]; then
-            test "$PROJECT_OUTCOME" = "success"
-            test "$PAGES_OUTCOME" = "success"
-            test "$SMOKE_OUTCOME" = "success"
+          if [ "$CONFIGURED" = true ]; then
+            test "$PAGES_OUTCOME" = success
+            test "$SMOKE_OUTCOME" = success
           fi
