@@ -34,10 +34,18 @@ jobs:
         run: |
           if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare credentials ausentes; Workers não serão publicados."
+            exit 0
           fi
+
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is missing or empty."
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is missing or empty."
+          fi
+          echo "Cloudflare credentials are required for a production Workers release."
+          exit 1
 
       - name: Provision CRM D1 and apply schema
         id: d1
@@ -202,7 +210,7 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Enforce release when credentials exist
+      - name: Enforce production release
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
@@ -211,9 +219,8 @@ jobs:
           ATTENDANT_OUTCOME: ${{ steps.attendant.outcome }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
         run: |
-          if [ "$CONFIGURED" = true ]; then
-            test "$D1_OUTCOME" = success
-            test "$CONTENT_OUTCOME" = success
-            test "$ATTENDANT_OUTCOME" = success
-            test "$SMOKE_OUTCOME" = success
-          fi
+          test "$CONFIGURED" = true
+          test "$D1_OUTCOME" = success
+          test "$CONTENT_OUTCOME" = success
+          test "$ATTENDANT_OUTCOME" = success
+          test "$SMOKE_OUTCOME" = success
