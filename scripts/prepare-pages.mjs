@@ -54,7 +54,7 @@ const homeLead = `<div class="cs-lead" id="cs-home-lead"><span class="cs-kicker"
     }
   });
 })();
-<\/script>`;
+</script>`;
 
 const homeVisible = `${sharedStyle}<section class="cs-extension" id="cs-commercial-extension"><span class="cs-kicker">Próximo passo</span><h2>Entenda o cenário antes de decidir a tecnologia.</h2><p class="cs-intro">Você pode explorar soluções por setor, estimar uma faixa de investimento, medir a maturidade digital ou conversar com o Codi. Tudo parte do problema real da operação.</p><div class="cs-grid"><article class="cs-card"><h3>Soluções por setor</h3><p>Agro, logística e varejo com problemas, soluções e resultados esperados.</p><div class="cs-actions"><a class="cs-btn" href="/setores/">Ver setores</a></div></article><article class="cs-card"><h3>Calculadora de projeto</h3><p>Faixa preliminar de investimento e prazo para software, app, SaaS, automação e BI.</p><div class="cs-actions"><a class="cs-btn" href="/calculadora/">Estimar projeto</a></div></article><article class="cs-card"><h3>Diagnóstico Digital</h3><p>Score 0–100 para identificar maturidade, gargalos e prioridades.</p><div class="cs-actions"><a class="cs-btn" href="/diagnostico/">Fazer diagnóstico</a></div></article><article class="cs-card"><h3>Codi</h3><p>Assistente digital para entender sua necessidade e encaminhar o próximo passo.</p><div class="cs-actions"><a class="cs-btn" href="/assistente/">Conversar com o Codi</a></div></article></div>${homeLead}<div class="cs-faq" id="faq"><span class="cs-kicker">Dúvidas frequentes</span><h2>O que as empresas perguntam antes de contratar</h2><div class="cs-faq-grid">${homeFaq.map(([q,a])=>`<article class="cs-card"><h3>${q}</h3><p>${a}</p></article>`).join('')}</div></div></section>`;
 
@@ -102,7 +102,7 @@ console.log('Pages prepared: SEO/AEO fallbacks, unpacked commercial surfaces, ac
 async function enhancePage({ file, canonical, title, description, body, schema, visible = '' }) {
   const target = path.join(deploy, file);
   let html = await fs.readFile(target, 'utf8');
-  html = stripInjected(html);
+  html = stripOuterInjected(html);
 
   const headBlock = buildHeadBlock(canonical, schema);
   html = html.replace('</head>', `${headBlock}</head>`);
@@ -141,6 +141,16 @@ function injectBundledTemplate(html, { headBlock, visibleBlock, description }) {
   const serialized = JSON.stringify(template).replace(/<\//g, '<\\u002F');
   const replacement = `<script type="__bundler/template">\n${serialized}\n</script>`;
   return html.slice(0, match.index) + replacement + html.slice(match.index + match[0].length);
+}
+
+function stripOuterInjected(html) {
+  const re = /<script type="__bundler\/template">[\s\S]*?<\/script>/;
+  const match = html.match(re);
+  if (!match) return stripInjected(html);
+  const token = '__CS_BUNDLED_TEMPLATE_PROTECTED__';
+  const protectedHtml = html.slice(0, match.index) + token + html.slice(match.index + match[0].length);
+  const clean = stripInjected(protectedHtml);
+  return clean.replace(token, match[0]);
 }
 
 function stripInjected(html) {
