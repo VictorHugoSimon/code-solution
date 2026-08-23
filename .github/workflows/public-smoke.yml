@@ -22,18 +22,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect deployment credentials
+        id: credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          configured=false
+          token_present=false
+          account_present=false
+          [ -n "$CLOUDFLARE_API_TOKEN" ] && token_present=true
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && account_present=true
+          if [ "$token_present" = true ] && [ "$account_present" = true ]; then configured=true; fi
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+          echo "token_present=$token_present" >> "$GITHUB_OUTPUT"
+          echo "account_present=$account_present" >> "$GITHUB_OUTPUT"
+
       - name: Check public endpoints
         id: check
         continue-on-error: true
         run: |
           set +e
-          home=failed; article=failed; diagnosis=failed; assistant=failed; robo=failed; attendant=failed; attendant_chat=failed
-          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""; chat_http=""; chat_error=""
+          home=failed; services=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed; robo=failed; attendant=failed; attendant_chat=failed
+          robo_url=""; attendant_url=""; robo_build=""; robo_ready=""; attendant_storage=""; chat_http=""; chat_error=""; apex_http=""; apex_location=""; apex_redirect=failed
 
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/ >/tmp/home.html && home=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/servicos/ >/tmp/services.html && services=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ >/tmp/article.html && grep -qi 'Cibersegurança e LGPD' /tmp/article.html && article=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/diagnostico/ >/tmp/diagnostico.html && grep -qi 'Diagnóstico Digital' /tmp/diagnostico.html && diagnosis=success
           curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/assistente/ >/tmp/assistente.html && grep -qi 'Codi' /tmp/assistente.html && assistant=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/privacidade/ >/tmp/privacidade.html && grep -qi 'Privacidade' /tmp/privacidade.html && privacy=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/setores/ >/tmp/setores.html && grep -qi 'Sistemas sob medida para o agronegócio' /tmp/setores.html && sectors=success
+          curl -L --fail --silent --show-error --max-time 20 https://www.codesolution.com.br/calculadora/ >/tmp/calculadora.html && grep -qi 'Quanto custa construir seu sistema' /tmp/calculadora.html && calculator=success
+
+          headers=$(mktemp)
+          curl --silent --show-error --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
+          apex_http=$(head -n1 "$headers" | awk '{print $2}')
+          apex_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          if [ "$apex_http" = "301" ] && echo "$apex_location" | grep -q '^https://www.codesolution.com.br/'; then apex_redirect=success; fi
 
           for base in victorhugo1612 victorhugoteixeirasimon6; do
             url="https://code-solution-robo.${base}.workers.dev/health"
@@ -61,9 +87,16 @@ jobs:
           fi
 
           echo "home=$home" >> "$GITHUB_OUTPUT"
+          echo "services=$services" >> "$GITHUB_OUTPUT"
           echo "article=$article" >> "$GITHUB_OUTPUT"
           echo "diagnosis=$diagnosis" >> "$GITHUB_OUTPUT"
           echo "assistant=$assistant" >> "$GITHUB_OUTPUT"
+          echo "privacy=$privacy" >> "$GITHUB_OUTPUT"
+          echo "sectors=$sectors" >> "$GITHUB_OUTPUT"
+          echo "calculator=$calculator" >> "$GITHUB_OUTPUT"
+          echo "apex_redirect=$apex_redirect" >> "$GITHUB_OUTPUT"
+          echo "apex_http=$apex_http" >> "$GITHUB_OUTPUT"
+          echo "apex_location=$apex_location" >> "$GITHUB_OUTPUT"
           echo "robo=$robo" >> "$GITHUB_OUTPUT"
           echo "attendant=$attendant" >> "$GITHUB_OUTPUT"
           echo "attendant_chat=$attendant_chat" >> "$GITHUB_OUTPUT"
@@ -78,10 +111,20 @@ jobs:
       - name: Persist public status
         if: always()
         env:
+          CF_CONFIGURED: ${{ steps.credentials.outputs.configured }}
+          CF_TOKEN_PRESENT: ${{ steps.credentials.outputs.token_present }}
+          CF_ACCOUNT_PRESENT: ${{ steps.credentials.outputs.account_present }}
           HOME: ${{ steps.check.outputs.home }}
+          SERVICES: ${{ steps.check.outputs.services }}
           ARTICLE: ${{ steps.check.outputs.article }}
           DIAGNOSIS: ${{ steps.check.outputs.diagnosis }}
           ASSISTANT: ${{ steps.check.outputs.assistant }}
+          PRIVACY: ${{ steps.check.outputs.privacy }}
+          SECTORS: ${{ steps.check.outputs.sectors }}
+          CALCULATOR: ${{ steps.check.outputs.calculator }}
+          APEX_REDIRECT: ${{ steps.check.outputs.apex_redirect }}
+          APEX_HTTP: ${{ steps.check.outputs.apex_http }}
+          APEX_LOCATION: ${{ steps.check.outputs.apex_location }}
           ROBO: ${{ steps.check.outputs.robo }}
           ATTENDANT: ${{ steps.check.outputs.attendant }}
           ATTENDANT_CHAT: ${{ steps.check.outputs.attendant_chat }}
@@ -95,26 +138,39 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
-          cat > docs/public-smoke-status.json <<EOF
-          {
-            "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "sourceCommit": "$SOURCE_SHA",
-            "home": "${HOME:-failed}",
-            "staticArticle": "${ARTICLE:-failed}",
-            "diagnosticLanding": "${DIAGNOSIS:-failed}",
-            "standaloneAssistant": "${ASSISTANT:-failed}",
-            "contentWorkerHealth": "${ROBO:-failed}",
-            "contentWorkerUrl": "$ROBO_URL",
-            "contentWorkerBuild": "$ROBO_BUILD",
-            "contentWorkerReady": "$ROBO_READY",
-            "attendantWorkerHealth": "${ATTENDANT:-failed}",
-            "attendantWorkerUrl": "$ATTENDANT_URL",
-            "attendantChat": "${ATTENDANT_CHAT:-failed}",
-            "attendantChatHttp": "$CHAT_HTTP",
-            "attendantChatError": "$CHAT_ERROR",
-            "attendantStorage": "$ATTENDANT_STORAGE"
-          }
-          EOF
+          node - <<'NODE'
+          const fs=require('fs');
+          const e=process.env;
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            cloudflareSecretsConfigured:e.CF_CONFIGURED||'false',
+            cloudflareApiTokenPresent:e.CF_TOKEN_PRESENT||'false',
+            cloudflareAccountIdPresent:e.CF_ACCOUNT_PRESENT||'false',
+            home:e.HOME||'failed',
+            services:e.SERVICES||'failed',
+            staticArticle:e.ARTICLE||'failed',
+            diagnosticLanding:e.DIAGNOSIS||'failed',
+            standaloneAssistant:e.ASSISTANT||'failed',
+            privacyPage:e.PRIVACY||'failed',
+            sectorsPage:e.SECTORS||'failed',
+            calculatorPage:e.CALCULATOR||'failed',
+            apexCanonicalRedirect:e.APEX_REDIRECT||'failed',
+            apexHttp:e.APEX_HTTP||'',
+            apexLocation:e.APEX_LOCATION||'',
+            contentWorkerHealth:e.ROBO||'failed',
+            contentWorkerUrl:e.ROBO_URL||'',
+            contentWorkerBuild:e.ROBO_BUILD||'',
+            contentWorkerReady:e.ROBO_READY||'',
+            attendantWorkerHealth:e.ATTENDANT||'failed',
+            attendantWorkerUrl:e.ATTENDANT_URL||'',
+            attendantChat:e.ATTENDANT_CHAT||'failed',
+            attendantChatHttp:e.CHAT_HTTP||'',
+            attendantChatError:e.CHAT_ERROR||'',
+            attendantStorage:e.ATTENDANT_STORAGE||''
+          };
+          fs.writeFileSync('docs/public-smoke-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
           git config user.name "Code Solution Smoke Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/public-smoke-status.json
