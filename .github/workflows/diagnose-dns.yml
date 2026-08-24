@@ -1,0 +1,92 @@
+name: Diagnose Code Solution DNS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-dns.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diagnose-codesolution-dns
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect Cloudflare zone and web DNS records
+        id: dns
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set +e
+          mkdir -p /tmp/cs-dns
+          configured=false
+          [ -n "$CLOUDFLARE_API_TOKEN" ] && configured=true
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+          if [ "$configured" != true ]; then exit 0; fi
+
+          zones_http=$(curl -sS --max-time 30 -o /tmp/cs-dns/zones.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            'https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br')
+          echo "zones_http=$zones_http" >> "$GITHUB_OUTPUT"
+
+          ZONE_ID=$(node - <<'NODE'
+          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/cs-dns/zones.json','utf8'))}catch{}
+          const z=Array.isArray(x.result)?x.result.find(v=>v.name==='codesolution.com.br'):null;
+          process.stdout.write(z?.id||'');
+          NODE
+          )
+          echo "zone_found=$([ -n "$ZONE_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$ZONE_ID" ]; then
+            dns_http=$(curl -sS --max-time 30 -o /tmp/cs-dns/records.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?per_page=100")
+            echo "dns_http=$dns_http" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Persist DNS preflight
+        if: always()
+        env:
+          CONFIGURED: ${{ steps.dns.outputs.configured }}
+          ZONES_HTTP: ${{ steps.dns.outputs.zones_http }}
+          ZONE_FOUND: ${{ steps.dns.outputs.zone_found }}
+          DNS_HTTP: ${{ steps.dns.outputs.dns_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const zones=read('/tmp/cs-dns/zones.json');
+          const records=read('/tmp/cs-dns/records.json');
+          const safeErrors=(x)=>Array.isArray(x?.errors)?x.errors.map(v=>({code:v.code,message:String(v.message||'').slice(0,220)})):[];
+          const zone=Array.isArray(zones.result)?zones.result.find(v=>v.name==='codesolution.com.br'):null;
+          const webNames=new Set(['codesolution.com.br','www.codesolution.com.br']);
+          const webRecords=Array.isArray(records.result)?records.result.filter(r=>webNames.has(r.name)).map(r=>({type:r.type,name:r.name,content:r.content,proxied:Boolean(r.proxied),ttl:r.ttl})):[];
+          const out={
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            credentialsConfigured:e.CONFIGURED==='true',
+            zonesHttp:Number(e.ZONES_HTTP||0),zonesApiSuccess:zones.success===true,
+            zoneFound:e.ZONE_FOUND==='true',zoneStatus:zone?.status||'',nameServers:zone?.name_servers||[],zonesErrors:safeErrors(zones),
+            dnsHttp:Number(e.DNS_HTTP||0),dnsApiSuccess:records.success===true,
+            webRecords,dnsErrors:safeErrors(records)
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/dns-preflight-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name "Code Solution DNS Diagnostic Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/dns-preflight-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record DNS preflight status"
+          git pull --rebase origin main
+          git push origin HEAD:main
