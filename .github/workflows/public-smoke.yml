@@ -1,5 +1,6 @@
 name: Public production smoke
 
+# Recheck trigger 2026-08-24 16:03 BRT: full public validation after account/token review.
 on:
   workflow_dispatch:
   push:
