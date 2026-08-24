@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/release-pages-now.yml'
   workflow_dispatch:
+  issues:
+    types: [opened, reopened]
 
 permissions:
   contents: write
@@ -16,6 +18,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name != 'issues' || github.event.issue.title == 'OPS: release Code Solution Pages now'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -33,6 +36,33 @@ jobs:
           npm run pages:prepare
           npm run check:bundled-surfaces
           node --check deploy/_worker.js
+          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
+          grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
+
+      - name: Verify Cloudflare credentials
+        id: credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
+
+      - name: Sync CRM admin secret to Pages
+        id: secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+          npx wrangler@4 pages secret list --project-name=codesolution-site >/tmp/pages-secrets.txt
+          grep -q 'CRM_ADMIN_KEY' /tmp/pages-secrets.txt
 
       - name: Deploy codesolution-site production
         id: deploy
@@ -42,8 +72,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
           npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="Direct production release $GITHUB_SHA" 2>&1 | tee /tmp/pages-deploy.log
 
       - name: Inspect deployment after release
@@ -63,23 +91,31 @@ jobs:
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/codesolution-site/deployments" || true
 
-          sleep 5
+          sleep 8
           base_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/home.html -w '%{http_code}' https://codesolution-site.pages.dev/)
-          sectors_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/sectors.html -w '%{http_code}' https://codesolution-site.pages.dev/setores/)
-          calculator_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/calculator.html -w '%{http_code}' https://codesolution-site.pages.dev/calculadora/)
+          login_http=$(curl -sS --max-time 30 -o /tmp/cs-release/login.html -w '%{http_code}' https://codesolution-site.pages.dev/painel/login/)
+          crm_headers=$(mktemp)
+          curl -sS --max-time 30 -D "$crm_headers" -o /dev/null https://codesolution-site.pages.dev/painel/crm/ || true
+          crm_http=$(head -n1 "$crm_headers" | awk '{print $2}')
+          crm_location=$(grep -i '^location:' "$crm_headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
           echo "base_http=$base_http" >> "$GITHUB_OUTPUT"
-          echo "sectors_http=$sectors_http" >> "$GITHUB_OUTPUT"
-          echo "calculator_http=$calculator_http" >> "$GITHUB_OUTPUT"
+          echo "login_http=$login_http" >> "$GITHUB_OUTPUT"
+          echo "crm_http=$crm_http" >> "$GITHUB_OUTPUT"
+          echo "crm_location=$crm_location" >> "$GITHUB_OUTPUT"
 
       - name: Persist direct release status
         if: always()
         env:
+          EVENT: ${{ github.event_name }}
           BUILD: ${{ steps.build.outcome }}
+          CREDENTIALS: ${{ steps.credentials.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
           PROJECT_HTTP: ${{ steps.inspect.outputs.project_http }}
           BASE_HTTP: ${{ steps.inspect.outputs.base_http }}
-          SECTORS_HTTP: ${{ steps.inspect.outputs.sectors_http }}
-          CALCULATOR_HTTP: ${{ steps.inspect.outputs.calculator_http }}
+          LOGIN_HTTP: ${{ steps.inspect.outputs.login_http }}
+          CRM_HTTP: ${{ steps.inspect.outputs.crm_http }}
+          CRM_LOCATION: ${{ steps.inspect.outputs.crm_location }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           node - <<'NODE'
@@ -91,9 +127,12 @@ jobs:
           const deployments=Array.isArray(ds.result)?ds.result.slice(0,10).map(d=>({id:d.id||'',url:d.url||'',environment:d.environment||'',createdOn:d.created_on||'',commitHash:d.deployment_trigger?.metadata?.commit_hash||'',branch:d.deployment_trigger?.metadata?.branch||'',stage:d.latest_stage?.name||'',stageStatus:d.latest_stage?.status||''})):[];
           const p=project.result||{};
           const latest=p.latest_deployment||{};
-          const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:e.BUILD||'failure',deploy:e.DEPLOY||'failure',projectHttp:Number(e.PROJECT_HTTP||0),projectApiSuccess:project.success===true,
+          const loginHtml=text('/tmp/cs-release/login.html');
+          const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,event:e.EVENT,
+            build:e.BUILD||'failure',credentials:e.CREDENTIALS||'failure',crmSecretSync:e.SECRET||'failure',deploy:e.DEPLOY||'failure',
+            projectHttp:Number(e.PROJECT_HTTP||0),projectApiSuccess:project.success===true,
             project:{name:p.name||'',productionBranch:p.production_branch||'',subdomain:p.subdomain||'',latestDeployment:{id:latest.id||'',url:latest.url||'',environment:latest.environment||'',createdOn:latest.created_on||'',commitHash:latest.deployment_trigger?.metadata?.commit_hash||'',branch:latest.deployment_trigger?.metadata?.branch||''}},deployments,
-            live:{home:{http:Number(e.BASE_HTTP||0),leadCapture:text('/tmp/cs-release/home.html').includes('cs-home-lead-form')},sectors:{http:Number(e.SECTORS_HTTP||0),expected:text('/tmp/cs-release/sectors.html').toLowerCase().includes('sistemas sob medida para o agronegócio')},calculator:{http:Number(e.CALCULATOR_HTTP||0),expected:text('/tmp/cs-release/calculator.html').toLowerCase().includes('quanto custa construir seu sistema')}}};
+            live:{home:{http:Number(e.BASE_HTTP||0)},login:{http:Number(e.LOGIN_HTTP||0),accessPage:loginHtml.includes('Acesso ao CRM'),usernameField:loginHtml.includes('name="username"'),passwordField:loginHtml.includes('name="password"')},crm:{http:Number(e.CRM_HTTP||0),location:e.CRM_LOCATION||''}}};
           fs.mkdirSync('docs',{recursive:true});
           fs.writeFileSync('docs/pages-direct-release-status.json',JSON.stringify(out,null,2)+'\n');
           NODE
@@ -109,9 +148,15 @@ jobs:
         if: always()
         env:
           BUILD: ${{ steps.build.outcome }}
+          CREDENTIALS: ${{ steps.credentials.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
           BASE_HTTP: ${{ steps.inspect.outputs.base_http }}
+          LOGIN_HTTP: ${{ steps.inspect.outputs.login_http }}
         run: |
           test "$BUILD" = success
+          test "$CREDENTIALS" = success
+          test "$SECRET" = success
           test "$DEPLOY" = success
           test "$BASE_HTTP" = 200
+          test "$LOGIN_HTTP" = 200
