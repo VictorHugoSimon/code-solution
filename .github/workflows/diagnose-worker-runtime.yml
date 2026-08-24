@@ -51,10 +51,12 @@ jobs:
             contentWorker: {
               AI_API_KEY: c.has('AI_API_KEY'),
               GITHUB_TOKEN: c.has('GITHUB_TOKEN'),
-              MANUAL_KEY: c.has('MANUAL_KEY')
+              MANUAL_KEY: c.has('MANUAL_KEY'),
+              AI_MODEL_SECRET: c.has('AI_MODEL')
             },
             attendantWorker: {
               AI_API_KEY: a.has('AI_API_KEY'),
+              AI_MODEL_SECRET: a.has('AI_MODEL'),
               CRM_ADMIN_KEY: a.has('CRM_ADMIN_KEY'),
               WHATSAPP_TOKEN: a.has('WHATSAPP_TOKEN'),
               WHATSAPP_PHONE_ID: a.has('WHATSAPP_PHONE_ID'),
