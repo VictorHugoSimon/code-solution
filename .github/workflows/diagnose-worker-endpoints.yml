@@ -1,0 +1,66 @@
+name: Diagnose Worker endpoints
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-worker-endpoints.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diagnose-worker-endpoints
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe production Worker endpoints
+        run: |
+          set +e
+          CONTENT=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev
+          ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+
+          content_http=$(curl -sS --max-time 25 -o /tmp/content.json -w '%{http_code}' "$CONTENT/health")
+          attendant_http=$(curl -sS --max-time 25 -o /tmp/attendant.json -w '%{http_code}' "$ATTENDANT/health")
+          chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
+            -H 'content-type: application/json' \
+            -H 'origin: https://www.codesolution.com.br' \
+            --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"runtime_diagnostic","consent":true}}')
+          lead_http=$(curl -sS --max-time 25 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" \
+            -H 'content-type: application/json' \
+            -H 'origin: https://www.codesolution.com.br' \
+            --data '{"name":"","whatsapp":"","need":""}')
+          crm_http=$(curl -sS --max-time 25 -o /tmp/crm.json -w '%{http_code}' "$ATTENDANT/crm/summary")
+
+          CONTENT_HTTP="$content_http" ATTENDANT_HTTP="$attendant_http" CHAT_HTTP="$chat_http" LEAD_HTTP="$lead_http" CRM_HTTP="$crm_http" node - <<'NODE'
+          const fs=require('fs');
+          const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const c=read('/tmp/content.json'),a=read('/tmp/attendant.json'),ch=read('/tmp/chat.json'),l=read('/tmp/lead.json'),r=read('/tmp/crm.json');
+          const out={
+            checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,
+            content:{http:Number(process.env.CONTENT_HTTP||0),ok:c.ok===true,ready:c.ready===true,build:c.build||'',aiConfigured:c.aiConfigured===true,githubConfigured:c.githubConfigured===true},
+            attendant:{http:Number(process.env.ATTENDANT_HTTP||0),ok:a.ok===true,service:a.service||'',storage:a.storage||''},
+            chat:{http:Number(process.env.CHAT_HTTP||0),ok:ch.ok===true,error:String(ch.error||''),messageLength:typeof ch.message==='string'?ch.message.length:0},
+            leadValidation:{http:Number(process.env.LEAD_HTTP||0),ok:l.ok===false&&l.error==='validation_error',error:String(l.error||'')},
+            crmUnauthenticated:{http:Number(process.env.CRM_HTTP||0),ok:Number(process.env.CRM_HTTP||0)===401,error:String(r.error||'')}
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/worker-endpoint-diagnostics.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Persist endpoint diagnostics
+        run: |
+          git config user.name "Code Solution Endpoint Diagnostic Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/worker-endpoint-diagnostics.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Worker endpoint diagnostics"
+          git pull --rebase origin main
+          git push origin HEAD:main
