@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-08-24T17:15:37.555Z",
+  "sourceCommit": "c525d6b4ecb19621507eca5e3552d0b6666de7ce",
+  "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
+  "account": {
+    "http": 200,
+    "success": true,
+    "name": "Victorhugoteixeirasimon6@gmail.com's Account"
+  },
+  "pages": {
+    "http": 400,
+    "success": false,
+    "items": []
+  },
+  "d1": {
+    "http": 200,
+    "success": true,
+    "items": [
+      {
+        "name": "code-solution-crm",
+        "uuid": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d"
+      }
+    ]
+  },
+  "kv": {
+    "http": 200,
+    "success": true,
+    "items": [
+      {
+        "title": "LEADS_KV",
+        "id": "8308fb9fe843456c84afa724769c00b9"
+      }
+    ]
+  },
+  "workers": {
+    "http": 200,
+    "success": true,
+    "items": [
+      {
+        "name": "code-solution-atendente"
+      },
+      {
+        "name": "code-solution-robo"
+      }
+    ]
+  }
+}
