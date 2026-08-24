@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-24T12:53:46.881Z",
-  "sourceCommit": "31cb5be8726a39ac43ee744d3ae784e3dde4e94d",
+  "checkedAt": "2026-08-24T16:54:28.456Z",
+  "sourceCommit": "0399c38fd9a68575140331fe00eab0409cd8b801",
   "cloudflareSecretsConfigured": "true",
   "cloudflareApiTokenPresent": "true",
   "cloudflareAccountIdPresent": "true",
@@ -24,9 +24,9 @@
   "attendantWorkerHealth": "success",
   "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health",
   "attendantStorage": "d1",
-  "attendantChat": "failed",
-  "attendantChatHttp": "502",
-  "attendantChatError": "ai_404",
+  "attendantChat": "success",
+  "attendantChatHttp": "200",
+  "attendantChatError": "",
   "attendantLeadValidation": "success",
   "attendantLeadValidationHttp": "400",
   "attendantLeadValidationError": "validation_error"
