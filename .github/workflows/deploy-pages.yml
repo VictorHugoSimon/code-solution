@@ -43,7 +43,12 @@ jobs:
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/privacidade/index.html
+          test -f deploy/painel/index.html
           test -f deploy/painel/crm/index.html
+          test -f deploy/painel/marketing/index.html
+          test -f deploy/painel/inteligencia/index.html
+          grep -qi 'Code Solution' deploy/assistente/index.html
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in release bundle'; exit 1; fi
 
       - name: Require Cloudflare credentials
         id: cf
@@ -54,6 +59,7 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Resolve Pages project
@@ -83,7 +89,7 @@ jobs:
           PROJECT: ${{ steps.project.outputs.name }}
         run: |
           set -euo pipefail
-          npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$GITHUB_SHA" --commit-message="GitHub Actions production $GITHUB_SHA"
+          npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$GITHUB_SHA" --commit-message="Code Solution production $GITHUB_SHA"
 
       - name: Ensure custom domains
         id: domains
@@ -109,14 +115,16 @@ jobs:
         run: |
           set -euo pipefail
           sleep 18
-          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
+          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /painel/ /painel/marketing/ /painel/inteligencia/ /sitemap.xml; do
             curl -LfsS --retry 6 --retry-delay 4 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/servicos/ | grep -q 'cs-services-aeo'
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/setores/ | grep -qi 'Sistemas sob medida para o agronegócio'
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/calculadora/ | grep -qi 'Quanto custa construir seu sistema'
-          curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/assistente/ | grep -qi 'Registrar e pedir retorno'
+          curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/assistente/ >/tmp/assistant-live.html
+          grep -qi 'Code Solution' /tmp/assistant-live.html
+          if grep -qi '\bCodi\b' /tmp/assistant-live.html; then echo '::error::Legacy Codi branding is still public'; exit 1; fi
           panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
           test "$panel_http" = 401
 
@@ -156,6 +164,7 @@ jobs:
             build:e.BUILD||'failure',cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
             pagesDeploy:e.PAGES||'skipped',customDomains:e.DOMAINS||'skipped',publicSmokeTest:e.SMOKE||'skipped',
             apexRedirect:e.APEX||'skipped',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
+            branding:'Code Solution',legacyCodiPublic:'blocked-by-smoke',
             deploymentMode:'automatic-or-manual-direct-upload-production'
           },null,2)+'\n');
           NODE
