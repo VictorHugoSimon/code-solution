@@ -35,6 +35,15 @@ Recursos confirmados nessa conta:
 - Worker `code-solution-robo`
 - Workers AI do atendente, via binding `AI`
 
+## DNS validado
+
+- API de zona: HTTP 200.
+- API de DNS: HTTP 200.
+- `codesolution.com.br` → CNAME proxied `codesolution-site.pages.dev`.
+- `www.codesolution.com.br` → CNAME proxied `codesolution-site.pages.dev`.
+- registros MX/TXT do Zoho e validação do Google preservados.
+- domínio raiz redireciona HTTP 301 para `https://www.codesolution.com.br/`.
+
 ## Auditoria da conta Instituto Államo
 
 Conta auditada: `Victor.instituto.allamo@gmail.com's Account`
@@ -53,6 +62,6 @@ Resultado da auditoria somente leitura:
 
 O workflow `.github/workflows/guard-cloudflare-account.yml` recusa a configuração caso `CLOUDFLARE_ACCOUNT_ID` seja diferente de `cad25fe6c91871bbafb58236cf9b9b81` e também confere domínio, Pages, D1, KV e Workers na conta pessoal.
 
-## Pendência operacional separada
+## Produção
 
-O token configurado no secret `CLOUDFLARE_API_TOKEN` ainda precisa de permissão para acessar registros DNS da zona `codesolution.com.br`. Isso é uma pendência de permissão/token, não uma migração de conta: a zona já está na conta pessoal correta.
+Em 24/08/2026, ownership, DNS, Pages, Workers, D1, KV, Codi, lead e autenticação administrativa do CRM foram validados com sucesso. Não há mais pendência de migração entre a conta do Instituto e a conta pessoal para os recursos de produção da Code Solution.
