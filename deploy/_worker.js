@@ -2,6 +2,8 @@ const ATTENDANT = 'https://code-solution-atendente.victorhugoteixeirasimon6.work
 const CANONICAL_HOST = 'www.codesolution.com.br';
 const SESSION_COOKIE = 'cs_panel_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const LOGIN_USERNAME = 'admin';
+const LOGIN_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';
 
 export default {
   async fetch(request, env) {
@@ -61,11 +63,15 @@ async function handleLogin(request, env, url) {
   if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const form = await request.formData().catch(() => null);
+  const username = String(form?.get('username') || '').trim();
   const password = String(form?.get('password') || '');
   const formNext = sanitizeNext(form?.get('next')) || next;
 
-  if (!password || !constantTimeEqual(password, env.CRM_ADMIN_KEY)) {
-    return loginPage({ status: 401, error: 'Senha inválida. Verifique a credencial administrativa e tente novamente.', next: formNext });
+  const usernameOk = constantTimeEqual(username.toLowerCase(), LOGIN_USERNAME);
+  const passwordOk = password ? constantTimeEqual(await sha256Hex(password), LOGIN_PASSWORD_SHA256) : false;
+
+  if (!usernameOk || !passwordOk) {
+    return loginPage({ status: 401, error: 'Usuário ou senha inválidos. Verifique as credenciais e tente novamente.', next: formNext, username });
   }
 
   const token = await createSession(env.CRM_ADMIN_KEY);
@@ -93,9 +99,10 @@ function logout(url) {
   });
 }
 
-function loginPage({ status = 200, error = '', next = '' } = {}) {
+function loginPage({ status = 200, error = '', next = '', username = 'admin' } = {}) {
   const safeError = escapeHtml(error);
   const safeNext = escapeHtml(next || '/painel/crm/');
+  const safeUsername = escapeHtml(username || 'admin');
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -111,13 +118,17 @@ function loginPage({ status = 200, error = '', next = '' } = {}) {
   <div class="brand"><div class="mark">CS</div><span>Code Solution</span></div>
   <div class="eyebrow">Área administrativa</div>
   <h1>Acesso ao CRM</h1>
-  <p>Entre com sua senha administrativa para acessar leads, pipeline e acompanhamento comercial.</p>
+  <p>Entre com seu usuário e senha para acessar leads, pipeline e acompanhamento comercial.</p>
   ${safeError ? `<div class="error" role="alert">${safeError}</div>` : ''}
   <form method="post" action="/painel/login/" autocomplete="on">
     <input type="hidden" name="next" value="${safeNext}">
     <div class="field">
-      <label for="password">Senha administrativa</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <label for="username">Usuário</label>
+      <input id="username" name="username" type="text" autocomplete="username" value="${safeUsername}" required autofocus>
+    </div>
+    <div class="field">
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
     </div>
     <button type="submit">Entrar no CRM</button>
   </form>
@@ -192,6 +203,11 @@ async function sign(value, secret) {
   );
   const bytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
   return base64UrlEncode(new Uint8Array(bytes));
+}
+
+async function sha256Hex(value) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(value)));
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function base64UrlEncode(bytes) {
