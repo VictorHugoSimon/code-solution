@@ -1,0 +1,76 @@
+name: One-shot CRM login production release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-crm-now.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build deploy validate and record
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set +e
+          build=failure
+          secret=failure
+          deploy=failure
+          smoke=failure
+
+          npm run blog:index && npm run blog:static && npm run pages:prepare && npm run check:bundled-surfaces && node --check deploy/_worker.js && grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js && grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
+          if [ $? -eq 0 ]; then build=success; fi
+
+          if [ "$build" = success ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CRM_ADMIN_KEY" ] && [ "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81" ]; then
+            printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+            if [ $? -eq 0 ]; then secret=success; fi
+          fi
+
+          if [ "$secret" = success ]; then
+            npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="One-shot CRM access release $GITHUB_SHA"
+            if [ $? -eq 0 ]; then deploy=success; fi
+          fi
+
+          if [ "$deploy" = success ]; then
+            sleep 12
+            login_http=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/login.html -w '%{http_code}' https://codesolution-site.pages.dev/painel/login/)
+            public_http=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/public-login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+            crm_headers=$(mktemp)
+            curl -sS -D "$crm_headers" -o /dev/null https://codesolution-site.pages.dev/painel/crm/
+            crm_http=$(head -n1 "$crm_headers" | awk '{print $2}')
+            crm_location=$(grep -i '^location:' "$crm_headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+            if [ "$login_http" = 200 ] && [ "$public_http" = 200 ] && [ "$crm_http" = 302 ] && grep -q 'Acesso ao CRM' /tmp/login.html && grep -q 'name="username"' /tmp/login.html && grep -q 'name="password"' /tmp/login.html && grep -q 'Acesso ao CRM' /tmp/public-login.html && echo "$crm_location" | grep -q '/painel/login/'; then
+              smoke=success
+            fi
+          fi
+
+          BUILD="$build" SECRET="$secret" DEPLOY="$deploy" SMOKE="$smoke" node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/crm-access-release.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.GITHUB_SHA,
+            build:e.BUILD,crmSecretSync:e.SECRET,pagesDeploy:e.DEPLOY,liveLoginSmoke:e.SMOKE,
+            loginUrl:'https://www.codesolution.com.br/painel/login/',username:'admin'
+          },null,2)+'\n');
+          NODE
+
+          git config user.name "Code Solution CRM One Shot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/crm-access-release.json
+          git commit -m "chore: record CRM one-shot release" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+          test "$build" = success && test "$secret" = success && test "$deploy" = success && test "$smoke" = success
