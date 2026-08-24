@@ -1,6 +1,7 @@
 import baseWorker from './atendente-worker.js';
 
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+const RUNTIME_BUILD = 'codi-workers-ai-2026-08-24.1';
 
 export default {
   async fetch(request, env, ctx) {
@@ -37,6 +38,7 @@ export default {
         handoffRequested,
         businessHoursOpen: officeOpen,
         provider: 'cloudflare-workers-ai',
+        runtimeBuild: RUNTIME_BUILD,
       }, 200, cors);
     } catch (error) {
       console.warn('Workers AI chat failed; trying configured fallback provider.', String(error?.message || error));
