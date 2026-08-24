@@ -1,0 +1,137 @@
+name: Repair Code Solution DNS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-code-solution-dns
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET: codesolution-site.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Cloudflare DNS access
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          mkdir -p /tmp/cs-dns-repair
+          curl -fsS --max-time 30 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            'https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br' \
+            > /tmp/cs-dns-repair/zones.json
+          ZONE_ID=$(node - <<'NODE'
+          const x=require('/tmp/cs-dns-repair/zones.json');
+          if(x.success!==true) process.exit(2);
+          const z=(x.result||[]).find(v=>v.name==='codesolution.com.br');
+          if(!z?.id) process.exit(3);
+          process.stdout.write(z.id);
+          NODE
+          )
+          echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
+          curl -fsS --max-time 30 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?per_page=100" \
+            > /tmp/cs-dns-repair/before.json
+          node - <<'NODE'
+          const x=require('/tmp/cs-dns-repair/before.json');
+          if(x.success!==true) throw new Error('DNS API não autorizado. Adicione Zone > DNS > Edit ao token da zona codesolution.com.br.');
+          NODE
+
+      - name: Replace only web A/AAAA/CNAME records
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE' > /tmp/cs-dns-repair/records.tsv
+          const x=require('/tmp/cs-dns-repair/before.json');
+          const names=new Set(['codesolution.com.br','www.codesolution.com.br']);
+          const types=new Set(['A','AAAA','CNAME']);
+          for(const r of x.result||[]) if(names.has(r.name)&&types.has(r.type)) console.log([r.id,r.type,r.name,r.content].join('\t'));
+          NODE
+
+          while IFS=$'\t' read -r id type name content; do
+            [ -z "${id:-}" ] && continue
+            echo "Removing old web record: $type $name -> $content"
+            curl -fsS --max-time 30 -X DELETE \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${id}" >/dev/null
+          done < /tmp/cs-dns-repair/records.tsv
+
+          for name in codesolution.com.br www.codesolution.com.br; do
+            echo "Creating CNAME $name -> $TARGET"
+            NAME="$name" node - <<'NODE' > /tmp/cs-dns-repair/create.json
+          process.stdout.write(JSON.stringify({type:'CNAME',name:process.env.NAME,content:process.env.TARGET,ttl:1,proxied:true}));
+          NODE
+            curl -fsS --max-time 30 -X POST \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              --data @/tmp/cs-dns-repair/create.json \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" >/dev/null
+          done
+
+      - name: Verify DNS records and Pages domains
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl -fsS --max-time 30 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?per_page=100" \
+            > /tmp/cs-dns-repair/after.json
+          node - <<'NODE'
+          const x=require('/tmp/cs-dns-repair/after.json');
+          if(x.success!==true) throw new Error('Falha ao reler DNS');
+          for(const name of ['codesolution.com.br','www.codesolution.com.br']){
+            const web=(x.result||[]).filter(r=>r.name===name&&['A','AAAA','CNAME'].includes(r.type));
+            if(web.length!==1) throw new Error(`${name}: esperado exatamente 1 registro web, encontrado ${web.length}`);
+            const r=web[0];
+            if(r.type!=='CNAME'||r.content!=='codesolution-site.pages.dev'||r.proxied!==true) throw new Error(`${name}: CNAME final inválido`);
+          }
+          NODE
+
+          pages_http=$(curl -sS --max-time 30 -o /tmp/cs-dns-repair/domains.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/codesolution-site/domains")
+          echo "PAGES_HTTP=$pages_http" >> "$GITHUB_ENV"
+
+      - name: Persist DNS repair status
+        if: always()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const before=read('/tmp/cs-dns-repair/before.json'),after=read('/tmp/cs-dns-repair/after.json'),domains=read('/tmp/cs-dns-repair/domains.json');
+          const names=new Set(['codesolution.com.br','www.codesolution.com.br']);
+          const clean=x=>(x.result||[]).filter(r=>names.has(r.name)&&['A','AAAA','CNAME'].includes(r.type)).map(r=>({type:r.type,name:r.name,content:r.content,proxied:Boolean(r.proxied)}));
+          const out={
+            checkedAt:new Date().toISOString(),sourceCommit:process.env.SOURCE_SHA,target:process.env.TARGET,
+            before:clean(before),after:clean(after),
+            dnsSuccess:after.success===true,
+            pagesHttp:Number(process.env.PAGES_HTTP||0),
+            pagesDomains:Array.isArray(domains.result)?domains.result.map(d=>({name:d.name,status:d.status,verificationStatus:d.verification_data?.status||'',verificationError:d.verification_data?.error_message||''})):[]
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/dns-repair-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name "Code Solution DNS Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/dns-repair-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record DNS repair status"
+          git pull --rebase origin main
+          git push origin HEAD:main
