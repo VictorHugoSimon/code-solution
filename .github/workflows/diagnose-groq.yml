@@ -1,0 +1,86 @@
+name: Diagnose Groq runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-groq.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diagnose-code-solution-groq
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe Groq API without exposing secret
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: |
+          set +e
+          mkdir -p /tmp/groq
+          configured=false
+          [ -n "$AI_API_KEY" ] && configured=true
+          if [ "$configured" = true ]; then
+            models_http=$(curl -sS --max-time 30 -o /tmp/groq/models.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${AI_API_KEY}" \
+              'https://api.groq.com/openai/v1/models')
+
+            llama_http=$(curl -sS --max-time 45 -o /tmp/groq/llama.json -w '%{http_code}' \
+              'https://api.groq.com/openai/v1/chat/completions' \
+              -H "Authorization: Bearer ${AI_API_KEY}" \
+              -H 'Content-Type: application/json' \
+              --data '{"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":"Responda apenas OK"}],"max_tokens":8,"temperature":0}')
+
+            gptoss_http=$(curl -sS --max-time 45 -o /tmp/groq/gptoss.json -w '%{http_code}' \
+              'https://api.groq.com/openai/v1/chat/completions' \
+              -H "Authorization: Bearer ${AI_API_KEY}" \
+              -H 'Content-Type: application/json' \
+              --data '{"model":"openai/gpt-oss-20b","messages":[{"role":"user","content":"Responda apenas OK"}],"max_tokens":8,"temperature":0}')
+          else
+            models_http=0
+            llama_http=0
+            gptoss_http=0
+          fi
+
+          CONFIGURED="$configured" MODELS_HTTP="$models_http" LLAMA_HTTP="$llama_http" GPTOSS_HTTP="$gptoss_http" node - <<'NODE'
+          const fs=require('fs');
+          const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const models=read('/tmp/groq/models.json');
+          const llama=read('/tmp/groq/llama.json');
+          const gptoss=read('/tmp/groq/gptoss.json');
+          const cleanError=x=>({
+            message:String(x?.error?.message||'').slice(0,300),
+            type:String(x?.error?.type||'').slice(0,120),
+            code:String(x?.error?.code||'').slice(0,120)
+          });
+          const ids=Array.isArray(models?.data)?models.data.map(x=>x?.id).filter(Boolean):[];
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:process.env.GITHUB_SHA,
+            keyConfigured:process.env.CONFIGURED==='true',
+            models:{http:Number(process.env.MODELS_HTTP||0),success:Array.isArray(models?.data),llamaAvailable:ids.includes('llama-3.1-8b-instant'),gptOssAvailable:ids.includes('openai/gpt-oss-20b'),modelCount:ids.length,error:cleanError(models)},
+            llama:{http:Number(process.env.LLAMA_HTTP||0),success:Array.isArray(llama?.choices)&&llama.choices.length>0,error:cleanError(llama)},
+            gptOss:{http:Number(process.env.GPTOSS_HTTP||0),success:Array.isArray(gptoss?.choices)&&gptoss.choices.length>0,error:cleanError(gptoss)}
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/groq-diagnostic.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Persist Groq diagnostic
+        run: |
+          git config user.name "Code Solution Groq Diagnostic Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/groq-diagnostic.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Groq diagnostic status"
+          git pull --rebase origin main
+          git push origin HEAD:main
