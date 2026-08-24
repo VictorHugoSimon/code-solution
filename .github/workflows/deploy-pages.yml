@@ -50,15 +50,17 @@ jobs:
           grep -qi 'Code Solution' deploy/assistente/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in release bundle'; exit 1; fi
 
-      - name: Require Cloudflare credentials
+      - name: Require production credentials
         id: cf
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CRM_ADMIN_KEY"
           test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
@@ -80,6 +82,19 @@ jobs:
             npx wrangler@4 pages project create "$project" --production-branch main
           fi
           echo "name=$project" >> "$GITHUB_OUTPUT"
+
+      - name: Sync CRM admin secret to Pages
+        id: panel_secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+          PROJECT: ${{ steps.project.outputs.name }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name="$PROJECT"
+          npx wrangler@4 pages secret list --project-name="$PROJECT" >/tmp/pages-secrets.txt
+          grep -q 'CRM_ADMIN_KEY' /tmp/pages-secrets.txt
 
       - name: Deploy production
         id: pages
@@ -109,13 +124,13 @@ jobs:
             fi
           done
 
-      - name: Smoke public routes
+      - name: Smoke public routes and CRM login
         id: smoke
         continue-on-error: true
         run: |
           set -euo pipefail
           sleep 18
-          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /painel/ /painel/marketing/ /painel/inteligencia/ /sitemap.xml; do
+          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
             curl -LfsS --retry 6 --retry-delay 4 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
@@ -125,8 +140,41 @@ jobs:
           curl -LfsS --retry 5 --retry-delay 4 https://www.codesolution.com.br/assistente/ >/tmp/assistant-live.html
           grep -qi 'Code Solution' /tmp/assistant-live.html
           if grep -qi '\bCodi\b' /tmp/assistant-live.html; then echo '::error::Legacy Codi branding is still public'; exit 1; fi
-          panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
-          test "$panel_http" = 401
+
+          login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          test "$login_http" = 200
+          grep -qi 'Acesso ao CRM' /tmp/login.html
+          grep -qi 'Entrar no CRM' /tmp/login.html
+
+          headers=$(mktemp)
+          curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          panel_http=$(head -n1 "$headers" | awk '{print $2}')
+          panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$panel_http" = 302
+          echo "$panel_location" | grep -q '/painel/login/'
+
+          api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
+          test "$api_http" = 401
+
+      - name: Validate authenticated CRM session
+        id: crm_session
+        continue-on-error: true
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          cookie=$(mktemp)
+          curl -sS -c "$cookie" -o /dev/null -w '%{http_code}' \
+            -X POST https://www.codesolution.com.br/painel/login/ \
+            --data-urlencode "password=${CRM_ADMIN_KEY}" \
+            --data-urlencode "next=/painel/crm/" >/tmp/login-code.txt
+          test "$(cat /tmp/login-code.txt)" = 303
+          grep -q 'cs_panel_session' "$cookie"
+          crm_http=$(curl -sS -b "$cookie" -o /tmp/crm.html -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
+          test "$crm_http" = 200
+          summary_http=$(curl -sS -b "$cookie" -o /tmp/summary.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
+          test "$summary_http" = 200
+          node -e "const x=require('/tmp/summary.json'); if(x.ok!==true) process.exit(1)"
 
       - name: Check apex canonical redirect
         id: apex
@@ -148,9 +196,11 @@ jobs:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
           PROJECT: ${{ steps.project.outputs.name }}
           BUILD: ${{ steps.build.outcome }}
+          SECRET_SYNC: ${{ steps.panel_secret.outcome }}
           PAGES: ${{ steps.pages.outcome }}
           DOMAINS: ${{ steps.domains.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
+          CRM_SESSION: ${{ steps.crm_session.outcome }}
           APEX: ${{ steps.apex.outcome }}
           APEX_HTTP: ${{ steps.apex.outputs.http }}
           APEX_LOCATION: ${{ steps.apex.outputs.location }}
@@ -162,8 +212,10 @@ jobs:
           fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             build:e.BUILD||'failure',cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
-            pagesDeploy:e.PAGES||'skipped',customDomains:e.DOMAINS||'skipped',publicSmokeTest:e.SMOKE||'skipped',
+            crmAdminSecretSync:e.SECRET_SYNC||'skipped',pagesDeploy:e.PAGES||'skipped',customDomains:e.DOMAINS||'skipped',
+            publicSmokeTest:e.SMOKE||'skipped',crmSessionSmoke:e.CRM_SESSION||'skipped',
             apexRedirect:e.APEX||'skipped',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
+            crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
             branding:'Code Solution',legacyCodiPublic:'blocked-by-smoke',
             deploymentMode:'automatic-or-manual-direct-upload-production'
           },null,2)+'\n');
@@ -180,9 +232,13 @@ jobs:
         if: always()
         env:
           BUILD: ${{ steps.build.outcome }}
+          SECRET_SYNC: ${{ steps.panel_secret.outcome }}
           PAGES: ${{ steps.pages.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
+          CRM_SESSION: ${{ steps.crm_session.outcome }}
         run: |
           test "$BUILD" = success
+          test "$SECRET_SYNC" = success
           test "$PAGES" = success
           test "$SMOKE" = success
+          test "$CRM_SESSION" = success
