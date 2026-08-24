@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-24T16:43:48.114Z",
-  "sourceCommit": "bef9ab8e1a473e81125d6bc90948471ba099f0d0",
+  "checkedAt": "2026-08-24T19:04:41.549Z",
+  "sourceCommit": "cb1f8146e2b81d9556c33dcf8f06c31fe8f68dff",
   "credentialsConfigured": true,
   "zonesHttp": 200,
   "zonesApiSuccess": true,
@@ -11,13 +11,65 @@
     "harleigh.ns.cloudflare.com"
   ],
   "zonesErrors": [],
-  "dnsHttp": 403,
-  "dnsApiSuccess": false,
-  "webRecords": [],
-  "dnsErrors": [
+  "dnsHttp": 200,
+  "dnsApiSuccess": true,
+  "webRecords": [
     {
-      "code": 10000,
-      "message": "Authentication error"
+      "type": "CNAME",
+      "name": "codesolution.com.br",
+      "content": "codesolution-site.pages.dev",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "type": "CNAME",
+      "name": "www.codesolution.com.br",
+      "content": "codesolution-site.pages.dev",
+      "proxied": true,
+      "ttl": 1
+    },
+    {
+      "type": "MX",
+      "name": "codesolution.com.br",
+      "content": "mx3.zoho.com",
+      "proxied": false,
+      "ttl": 1
+    },
+    {
+      "type": "MX",
+      "name": "codesolution.com.br",
+      "content": "mx2.zoho.com",
+      "proxied": false,
+      "ttl": 1
+    },
+    {
+      "type": "MX",
+      "name": "codesolution.com.br",
+      "content": "mx.zoho.com",
+      "proxied": false,
+      "ttl": 1
+    },
+    {
+      "type": "TXT",
+      "name": "codesolution.com.br",
+      "content": "\"google-site-verification=AfA3oDCm17s16q0dwpRp_xCgdahlYt3otV4D7mA6kEM\"",
+      "proxied": false,
+      "ttl": 1
+    },
+    {
+      "type": "TXT",
+      "name": "codesolution.com.br",
+      "content": "v=spf1 include:zohomail.com ~all",
+      "proxied": false,
+      "ttl": 1
+    },
+    {
+      "type": "TXT",
+      "name": "codesolution.com.br",
+      "content": "zoho-verification=zb75030587.zmverify.zoho.com",
+      "proxied": false,
+      "ttl": 60
     }
-  ]
+  ],
+  "dnsErrors": []
 }
