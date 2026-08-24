@@ -1,0 +1,117 @@
+name: Release Code Solution Pages now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-pages-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-pages-release-now
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build exact production bundle
+        id: build
+        run: |
+          set -euo pipefail
+          npm run blog:index
+          npm run blog:static
+          npm run pages:prepare
+          npm run check:bundled-surfaces
+          node --check deploy/_worker.js
+
+      - name: Deploy codesolution-site production
+        id: deploy
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --branch=main 2>&1 | tee /tmp/pages-deploy.log
+
+      - name: Inspect deployment after release
+        id: inspect
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          mkdir -p /tmp/cs-release
+          http=$(curl -sS --max-time 30 -o /tmp/cs-release/project.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/codesolution-site")
+          echo "project_http=$http" >> "$GITHUB_OUTPUT"
+          curl -sS --max-time 30 -o /tmp/cs-release/deployments.json \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/codesolution-site/deployments" || true
+
+          sleep 5
+          base_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/home.html -w '%{http_code}' https://codesolution-site.pages.dev/)
+          sectors_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/sectors.html -w '%{http_code}' https://codesolution-site.pages.dev/setores/)
+          calculator_http=$(curl -sS -L --max-time 30 -o /tmp/cs-release/calculator.html -w '%{http_code}' https://codesolution-site.pages.dev/calculadora/)
+          echo "base_http=$base_http" >> "$GITHUB_OUTPUT"
+          echo "sectors_http=$sectors_http" >> "$GITHUB_OUTPUT"
+          echo "calculator_http=$calculator_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist direct release status
+        if: always()
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          PROJECT_HTTP: ${{ steps.inspect.outputs.project_http }}
+          BASE_HTTP: ${{ steps.inspect.outputs.base_http }}
+          SECTORS_HTTP: ${{ steps.inspect.outputs.sectors_http }}
+          CALCULATOR_HTTP: ${{ steps.inspect.outputs.calculator_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const text=(p)=>{try{return fs.readFileSync(p,'utf8')}catch{return ''}};
+          const project=read('/tmp/cs-release/project.json');
+          const ds=read('/tmp/cs-release/deployments.json');
+          const deployments=Array.isArray(ds.result)?ds.result.slice(0,10).map(d=>({id:d.id||'',url:d.url||'',environment:d.environment||'',createdOn:d.created_on||'',commitHash:d.deployment_trigger?.metadata?.commit_hash||'',branch:d.deployment_trigger?.metadata?.branch||'',stage:d.latest_stage?.name||'',stageStatus:d.latest_stage?.status||''})):[];
+          const p=project.result||{};
+          const latest=p.latest_deployment||{};
+          const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:e.BUILD||'failure',deploy:e.DEPLOY||'failure',projectHttp:Number(e.PROJECT_HTTP||0),projectApiSuccess:project.success===true,
+            project:{name:p.name||'',productionBranch:p.production_branch||'',subdomain:p.subdomain||'',latestDeployment:{id:latest.id||'',url:latest.url||'',environment:latest.environment||'',createdOn:latest.created_on||'',commitHash:latest.deployment_trigger?.metadata?.commit_hash||'',branch:latest.deployment_trigger?.metadata?.branch||''}},deployments,
+            live:{home:{http:Number(e.BASE_HTTP||0),leadCapture:text('/tmp/cs-release/home.html').includes('cs-home-lead-form')},sectors:{http:Number(e.SECTORS_HTTP||0),expected:text('/tmp/cs-release/sectors.html').toLowerCase().includes('sistemas sob medida para o agronegócio')},calculator:{http:Number(e.CALCULATOR_HTTP||0),expected:text('/tmp/cs-release/calculator.html').toLowerCase().includes('quanto custa construir seu sistema')}}};
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/pages-direct-release-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Direct Pages Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/pages-direct-release-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record direct Pages release status"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce direct production release
+        if: always()
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          BASE_HTTP: ${{ steps.inspect.outputs.base_http }}
+        run: |
+          test "$BUILD" = success
+          test "$DEPLOY" = success
+          test "$BASE_HTTP" = 200
