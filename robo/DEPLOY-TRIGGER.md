@@ -1,5 +1,5 @@
 # Deploy trigger
 
-Trigger controlado do pipeline de produção após recriação do repository secret `CLOUDFLARE_API_TOKEN` em 2026-08-23.
+Lançamento oficial da Code Solution em Produção em 24/08/2026, após validação completa de domínio, Pages, Workers, D1, CRM, Codi e DNS.
 
 Este arquivo não participa do runtime dos Workers.
