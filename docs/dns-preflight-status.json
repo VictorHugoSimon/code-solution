@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-08-24T00:52:03.905Z",
+  "sourceCommit": "4c149befb4e4db74d133744c43e88126dd8d9381",
+  "credentialsConfigured": true,
+  "zonesHttp": 200,
+  "zonesApiSuccess": true,
+  "zoneFound": true,
+  "zoneStatus": "active",
+  "nameServers": [
+    "hank.ns.cloudflare.com",
+    "harleigh.ns.cloudflare.com"
+  ],
+  "zonesErrors": [],
+  "dnsHttp": 403,
+  "dnsApiSuccess": false,
+  "webRecords": [],
+  "dnsErrors": [
+    {
+      "code": 10000,
+      "message": "Authentication error"
+    }
+  ]
+}
