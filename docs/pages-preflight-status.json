@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-08-24T00:50:43.823Z",
+  "sourceCommit": "005cee7ad4cc85c603f73b2bd8485788da154cd3",
+  "credentialsConfigured": true,
+  "projectsHttp": 200,
+  "projectsApiSuccess": true,
+  "projectFound": true,
+  "project": "codesolution-site",
+  "projects": [
+    {
+      "name": "codesolution-site",
+      "productionBranch": "main",
+      "subdomain": "codesolution-site.pages.dev"
+    },
+    {
+      "name": "ifarm-crm-painel",
+      "productionBranch": "main",
+      "subdomain": "ifarm-crm-painel.pages.dev"
+    },
+    {
+      "name": "codesolution",
+      "productionBranch": "main",
+      "subdomain": "codesolution.pages.dev"
+    },
+    {
+      "name": "terra-pulse-painel",
+      "productionBranch": "main",
+      "subdomain": "terra-pulse-painel.pages.dev"
+    }
+  ],
+  "projectsErrors": [],
+  "domainsHttp": 200,
+  "domainsApiSuccess": true,
+  "domains": [
+    {
+      "name": "codesolution.com.br",
+      "status": "pending",
+      "verificationStatus": "pending"
+    },
+    {
+      "name": "www.codesolution.com.br",
+      "status": "pending",
+      "verificationStatus": "pending"
+    }
+  ],
+  "domainsErrors": []
+}
