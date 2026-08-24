@@ -145,6 +145,8 @@ jobs:
           test "$login_http" = 200
           grep -qi 'Acesso ao CRM' /tmp/login.html
           grep -qi 'Entrar no CRM' /tmp/login.html
+          grep -qi 'name="username"' /tmp/login.html
+          grep -qi 'name="password"' /tmp/login.html
 
           headers=$(mktemp)
           curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
@@ -156,23 +158,16 @@ jobs:
           api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
           test "$api_http" = 401
 
-      - name: Validate authenticated CRM session
-        id: crm_session
+      - name: Validate CRM backend secret
+        id: crm_backend
         continue-on-error: true
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
           set -euo pipefail
-          cookie=$(mktemp)
-          curl -sS -c "$cookie" -o /dev/null -w '%{http_code}' \
-            -X POST https://www.codesolution.com.br/painel/login/ \
-            --data-urlencode "password=${CRM_ADMIN_KEY}" \
-            --data-urlencode "next=/painel/crm/" >/tmp/login-code.txt
-          test "$(cat /tmp/login-code.txt)" = 303
-          grep -q 'cs_panel_session' "$cookie"
-          crm_http=$(curl -sS -b "$cookie" -o /tmp/crm.html -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
-          test "$crm_http" = 200
-          summary_http=$(curl -sS -b "$cookie" -o /tmp/summary.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
+          summary_http=$(curl -sS -o /tmp/summary.json -w '%{http_code}' \
+            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
+            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
           test "$summary_http" = 200
           node -e "const x=require('/tmp/summary.json'); if(x.ok!==true) process.exit(1)"
 
@@ -200,7 +195,7 @@ jobs:
           PAGES: ${{ steps.pages.outcome }}
           DOMAINS: ${{ steps.domains.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
-          CRM_SESSION: ${{ steps.crm_session.outcome }}
+          CRM_BACKEND: ${{ steps.crm_backend.outcome }}
           APEX: ${{ steps.apex.outcome }}
           APEX_HTTP: ${{ steps.apex.outputs.http }}
           APEX_LOCATION: ${{ steps.apex.outputs.location }}
@@ -213,7 +208,7 @@ jobs:
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             build:e.BUILD||'failure',cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
             crmAdminSecretSync:e.SECRET_SYNC||'skipped',pagesDeploy:e.PAGES||'skipped',customDomains:e.DOMAINS||'skipped',
-            publicSmokeTest:e.SMOKE||'skipped',crmSessionSmoke:e.CRM_SESSION||'skipped',
+            publicSmokeTest:e.SMOKE||'skipped',crmBackendSmoke:e.CRM_BACKEND||'skipped',
             apexRedirect:e.APEX||'skipped',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
             crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
             branding:'Code Solution',legacyCodiPublic:'blocked-by-smoke',
@@ -235,10 +230,10 @@ jobs:
           SECRET_SYNC: ${{ steps.panel_secret.outcome }}
           PAGES: ${{ steps.pages.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
-          CRM_SESSION: ${{ steps.crm_session.outcome }}
+          CRM_BACKEND: ${{ steps.crm_backend.outcome }}
         run: |
           test "$BUILD" = success
           test "$SECRET_SYNC" = success
           test "$PAGES" = success
           test "$SMOKE" = success
-          test "$CRM_SESSION" = success
+          test "$CRM_BACKEND" = success
