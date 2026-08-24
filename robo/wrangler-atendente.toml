@@ -7,5 +7,5 @@ binding = "LEADS_KV"
 id = "8308fb9fe843456c84afa724769c00b9"
 
 [vars]
-AI_MODEL = "llama-3.1-8b-instant"
+AI_MODEL = "llama-3.3-70b-versatile"
 ALLOWED_ORIGINS = "https://www.codesolution.com.br,https://codesolution.com.br"
