@@ -1,20 +1,49 @@
 {
-  "checkedAt": "2026-08-24T17:15:37.555Z",
-  "sourceCommit": "c525d6b4ecb19621507eca5e3552d0b6666de7ce",
+  "checkedAt": "2026-08-24T17:17:29.697Z",
+  "sourceCommit": "fd096567f0bb5eb730fcb9d7d3fd7dd7fc5bbc42",
   "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
   "account": {
     "http": 200,
     "success": true,
     "name": "Victorhugoteixeirasimon6@gmail.com's Account"
   },
+  "zone": {
+    "http": 200,
+    "success": true,
+    "found": true,
+    "name": "codesolution.com.br",
+    "id": "68188e983aeadea279bf680ccfd260c9",
+    "status": "active",
+    "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
+    "accountName": "Victorhugoteixeirasimon6@gmail.com's Account",
+    "sameAsDeploymentAccount": true,
+    "nameServers": [
+      "hank.ns.cloudflare.com",
+      "harleigh.ns.cloudflare.com"
+    ],
+    "errors": []
+  },
   "pages": {
-    "http": 400,
-    "success": false,
-    "items": []
+    "http": 200,
+    "success": true,
+    "errors": [],
+    "items": [
+      {
+        "name": "codesolution-site",
+        "subdomain": "codesolution-site.pages.dev",
+        "productionBranch": "main"
+      },
+      {
+        "name": "codesolution",
+        "subdomain": "codesolution.pages.dev",
+        "productionBranch": "main"
+      }
+    ]
   },
   "d1": {
     "http": 200,
     "success": true,
+    "errors": [],
     "items": [
       {
         "name": "code-solution-crm",
@@ -25,6 +54,7 @@
   "kv": {
     "http": 200,
     "success": true,
+    "errors": [],
     "items": [
       {
         "title": "LEADS_KV",
@@ -35,6 +65,7 @@
   "workers": {
     "http": 200,
     "success": true,
+    "errors": [],
     "items": [
       {
         "name": "code-solution-atendente"
