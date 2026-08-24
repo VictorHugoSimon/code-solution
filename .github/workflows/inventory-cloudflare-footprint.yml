@@ -1,0 +1,79 @@
+name: Inventory Code Solution Cloudflare Footprint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inventory-cloudflare-footprint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inventory-code-solution-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect non-sensitive Cloudflare metadata
+        run: |
+          set -euo pipefail
+          test -n "$ACCOUNT_ID"
+          test -n "$TOKEN"
+          mkdir -p /tmp/cs-footprint
+
+          api() {
+            local name="$1" url="$2"
+            local http
+            http=$(curl -sS --max-time 30 -o "/tmp/cs-footprint/${name}.json" -w '%{http_code}' \
+              -H "Authorization: Bearer ${TOKEN}" "$url" || true)
+            echo "$http" > "/tmp/cs-footprint/${name}.http"
+          }
+
+          api account "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}"
+          api pages "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects?per_page=100"
+          api d1 "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database?per_page=100"
+          api kv "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces?per_page=100"
+          api workers "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts"
+
+      - name: Persist filtered Code Solution footprint
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const read=(n)=>{try{return JSON.parse(fs.readFileSync(`/tmp/cs-footprint/${n}.json`,'utf8'))}catch{return {}}};
+          const http=(n)=>Number((()=>{try{return fs.readFileSync(`/tmp/cs-footprint/${n}.http`,'utf8').trim()}catch{return '0'}})());
+          const account=read('account'),pages=read('pages'),d1=read('d1'),kv=read('kv'),workers=read('workers');
+          const arr=(x)=>Array.isArray(x?.result)?x.result:[];
+          const hasCS=(s)=>/code[- ]?solution|codesolution/i.test(String(s||''));
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:process.env.SOURCE_SHA,
+            accountId:process.env.ACCOUNT_ID,
+            account:{http:http('account'),success:account.success===true,name:account?.result?.name||''},
+            pages:{http:http('pages'),success:pages.success===true,items:arr(pages).filter(x=>hasCS(x.name)||hasCS(x.subdomain)).map(x=>({name:x.name,subdomain:x.subdomain||'',productionBranch:x.production_branch||''}))},
+            d1:{http:http('d1'),success:d1.success===true,items:arr(d1).filter(x=>hasCS(x.name)).map(x=>({name:x.name,uuid:x.uuid||x.id||''}))},
+            kv:{http:http('kv'),success:kv.success===true,items:arr(kv).filter(x=>hasCS(x.title)||String(x.id||'')==='8308fb9fe843456c84afa724769c00b9').map(x=>({title:x.title||'',id:x.id||''}))},
+            workers:{http:http('workers'),success:workers.success===true,items:arr(workers).filter(x=>hasCS(x.id)||hasCS(x.name)).map(x=>({name:x.id||x.name||''}))}
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/cloudflare-footprint.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+          git config user.name "Code Solution Cloudflare Inventory Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/cloudflare-footprint.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Code Solution Cloudflare footprint"
+          git pull --rebase origin main
+          git push origin HEAD:main
