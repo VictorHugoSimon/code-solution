@@ -1,0 +1,34 @@
+{
+  "checkedAt": "2026-08-24T00:36:34.349Z",
+  "sourceCommit": "729d7d8c512110f84f3f78c54974da05474f2483",
+  "content": {
+    "http": 200,
+    "ok": true,
+    "ready": true,
+    "build": "commercial-engine-2026-08-22.2",
+    "aiConfigured": true,
+    "githubConfigured": true
+  },
+  "attendant": {
+    "http": 200,
+    "ok": true,
+    "service": "code-solution-atendente",
+    "storage": "d1"
+  },
+  "chat": {
+    "http": 502,
+    "ok": false,
+    "error": "ai_404",
+    "messageLength": 0
+  },
+  "leadValidation": {
+    "http": 400,
+    "ok": true,
+    "error": "validation_error"
+  },
+  "crmUnauthenticated": {
+    "http": 401,
+    "ok": true,
+    "error": "unauthorized"
+  }
+}
