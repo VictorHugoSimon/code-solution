@@ -6,4 +6,4 @@ compatibility_date = "2026-08-22"
 crons = ["0 12 * * 2,5"]
 
 [vars]
-AI_MODEL = "llama-3.1-8b-instant"
+AI_MODEL = "openai/gpt-oss-20b"
