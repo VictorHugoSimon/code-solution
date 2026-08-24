@@ -1,6 +1,6 @@
 name: Diagnose Worker endpoints
 
-# Re-run marker: after Codi model update 2026-08-24
+# Re-run marker: Workers AI propagation-aware diagnostic 2026-08-24
 on:
   push:
     branches: [main]
@@ -30,10 +30,17 @@ jobs:
 
           content_http=$(curl -sS --max-time 25 -o /tmp/content.json -w '%{http_code}' "$CONTENT/health")
           attendant_http=$(curl -sS --max-time 25 -o /tmp/attendant.json -w '%{http_code}' "$ATTENDANT/health")
-          chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
-            -H 'content-type: application/json' \
-            -H 'origin: https://www.codesolution.com.br' \
-            --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"runtime_diagnostic","consent":true}}')
+
+          chat_http=0
+          for attempt in $(seq 1 12); do
+            chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
+              -H 'content-type: application/json' \
+              -H 'origin: https://www.codesolution.com.br' \
+              --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"runtime_diagnostic","consent":true}}')
+            [ "$chat_http" = 200 ] && break
+            sleep 5
+          done
+
           lead_http=$(curl -sS --max-time 25 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" \
             -H 'content-type: application/json' \
             -H 'origin: https://www.codesolution.com.br' \
@@ -48,7 +55,7 @@ jobs:
             checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,
             content:{http:Number(process.env.CONTENT_HTTP||0),ok:c.ok===true,ready:c.ready===true,build:c.build||'',aiConfigured:c.aiConfigured===true,githubConfigured:c.githubConfigured===true},
             attendant:{http:Number(process.env.ATTENDANT_HTTP||0),ok:a.ok===true,service:a.service||'',storage:a.storage||''},
-            chat:{http:Number(process.env.CHAT_HTTP||0),ok:ch.ok===true,error:String(ch.error||''),messageLength:typeof ch.message==='string'?ch.message.length:0},
+            chat:{http:Number(process.env.CHAT_HTTP||0),ok:ch.ok===true,error:String(ch.error||''),provider:String(ch.provider||''),messageLength:typeof ch.message==='string'?ch.message.length:0},
             leadValidation:{http:Number(process.env.LEAD_HTTP||0),ok:l.ok===false&&l.error==='validation_error',error:String(l.error||'')},
             crmUnauthenticated:{http:Number(process.env.CRM_HTTP||0),ok:Number(process.env.CRM_HTTP||0)===401,error:String(r.error||'')}
           };
