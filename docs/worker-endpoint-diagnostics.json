@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-24T12:51:00.873Z",
-  "sourceCommit": "7f4df902763348e5db02c42d57d6555e48cd165c",
+  "checkedAt": "2026-08-24T12:55:17.462Z",
+  "sourceCommit": "bc0ff14a28df8c76c9ad9a16bec27ccbef1b7c3f",
   "content": {
     "http": 200,
     "ok": true,
@@ -16,10 +16,11 @@
     "storage": "d1"
   },
   "chat": {
-    "http": 502,
-    "ok": false,
-    "error": "ai_404",
-    "messageLength": 0
+    "http": 200,
+    "ok": true,
+    "error": "",
+    "provider": "cloudflare-workers-ai",
+    "messageLength": 332
   },
   "leadValidation": {
     "http": 400,
