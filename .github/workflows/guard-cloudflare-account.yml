@@ -1,0 +1,70 @@
+name: Guard Code Solution Cloudflare Ownership
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'robo/**'
+      - 'deploy/**'
+      - 'crm/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      EXPECTED_ACCOUNT_ID: cad25fe6c91871bbafb58236cf9b9b81
+      ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Refuse non-personal Cloudflare account
+        run: |
+          set -euo pipefail
+          test -n "$ACCOUNT_ID"
+          test -n "$TOKEN"
+          if [ "$ACCOUNT_ID" != "$EXPECTED_ACCOUNT_ID" ]; then
+            echo "::error::Code Solution must deploy only to Cloudflare account cad25fe6c91871bbafb58236cf9b9b81 (Victorhugoteixeirasimon6@gmail.com's Account)."
+            exit 1
+          fi
+
+      - name: Verify Code Solution resources belong to expected account
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cs-guard
+          H="Authorization: Bearer ${TOKEN}"
+
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}" > /tmp/cs-guard/account.json
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br" > /tmp/cs-guard/zone.json
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database?per_page=100" > /tmp/cs-guard/d1.json
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces?per_page=100" > /tmp/cs-guard/kv.json
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts" > /tmp/cs-guard/workers.json
+          curl -fsS --max-time 30 -H "$H" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects" > /tmp/cs-guard/pages.json
+
+          EXPECTED_ACCOUNT_ID="$EXPECTED_ACCOUNT_ID" node - <<'NODE'
+          const fs=require('fs');
+          const read=n=>JSON.parse(fs.readFileSync(`/tmp/cs-guard/${n}.json`,'utf8'));
+          const arr=x=>Array.isArray(x?.result)?x.result:[];
+          const expected=process.env.EXPECTED_ACCOUNT_ID;
+          const account=read('account'),zone=read('zone'),d1=read('d1'),kv=read('kv'),workers=read('workers'),pages=read('pages');
+          if(account.success!==true || account?.result?.id!==expected) throw new Error('Cloudflare account mismatch');
+          const z=arr(zone).find(x=>x.name==='codesolution.com.br');
+          if(!z || z?.account?.id!==expected) throw new Error('codesolution.com.br is not in the personal Cloudflare account');
+          if(!arr(d1).some(x=>x.name==='code-solution-crm' && (x.uuid||x.id)==='5f2a71bc-e3bf-4063-b52d-48ad11132e1d')) throw new Error('Code Solution D1 missing/moved');
+          if(!arr(kv).some(x=>x.id==='8308fb9fe843456c84afa724769c00b9')) throw new Error('Code Solution KV missing/moved');
+          const wn=new Set(arr(workers).map(x=>x.id||x.name));
+          if(!wn.has('code-solution-atendente') || !wn.has('code-solution-robo')) throw new Error('Code Solution Workers missing/moved');
+          const pn=new Set(arr(pages).map(x=>x.name));
+          if(!pn.has('codesolution-site')) throw new Error('Code Solution Pages project missing/moved');
+          console.log('Ownership guard OK: all production resources are in the personal Cloudflare account.');
+          NODE
