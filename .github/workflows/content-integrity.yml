@@ -53,7 +53,7 @@ jobs:
         if: steps.blog_index.outcome == 'success'
         run: npm run blog:static
 
-      - name: Prepare Pages SEO AEO and security
+      - name: Prepare Pages SEO AEO security and branding
         id: pages_prepare
         continue-on-error: true
         if: steps.static_blog.outcome == 'success'
@@ -71,7 +71,10 @@ jobs:
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/privacidade/index.html
+          test -f deploy/painel/index.html
           test -f deploy/painel/crm/index.html
+          test -f deploy/painel/marketing/index.html
+          test -f deploy/painel/inteligencia/index.html
           test -f deploy/_worker.js
           node --check deploy/_worker.js
           npm run check:bundled-surfaces
@@ -80,7 +83,8 @@ jobs:
           grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
           grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
           grep -qi 'Diagnóstico Digital' deploy/diagnostico/index.html
-          grep -qi 'Codi' deploy/assistente/index.html
+          grep -qi 'Code Solution' deploy/assistente/index.html
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in assistant'; exit 1; fi
           grep -qi 'Privacidade' deploy/privacidade/index.html
 
       - name: Commit generated artifacts
@@ -88,9 +92,9 @@ jobs:
         run: |
           git config user.name "Code Solution Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add content/blog/index.json deploy/blog deploy/en/blog deploy/es/blog deploy/sitemap.xml deploy/index.html deploy/servicos/index.html deploy/_headers
+          git add content/blog/index.json deploy
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: rebuild crawlable Pages bundle"
+          git commit -m "chore: rebuild Code Solution production bundle"
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -168,6 +172,12 @@ jobs:
           test -f deploy/diagnostico/index.html
           test -f deploy/assistente/index.html
           test -f deploy/privacidade/index.html
+          test -f deploy/painel/index.html
+          test -f deploy/painel/crm/index.html
+          test -f deploy/painel/marketing/index.html
+          test -f deploy/painel/inteligencia/index.html
+          grep -qi 'Code Solution' deploy/assistente/index.html
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in release bundle'; exit 1; fi
 
       - name: Detect Cloudflare credentials
         id: cf
@@ -237,13 +247,15 @@ jobs:
         run: |
           set -euo pipefail
           sleep 15
-          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
+          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /painel/ /painel/marketing/ /painel/inteligencia/ /sitemap.xml; do
             curl -LfsS --retry 5 --retry-delay 4 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
           curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
           curl -LfsS https://www.codesolution.com.br/setores/ | grep -qi 'Sistemas sob medida para o agronegócio'
           curl -LfsS https://www.codesolution.com.br/calculadora/ | grep -qi 'Quanto custa construir seu sistema'
-          curl -LfsS https://www.codesolution.com.br/assistente/ | grep -qi 'Registrar e pedir retorno'
+          curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant-live.html
+          grep -qi 'Code Solution' /tmp/assistant-live.html
+          if grep -qi '\bCodi\b' /tmp/assistant-live.html; then echo '::error::Legacy Codi branding is still public'; exit 1; fi
           panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
           test "$panel_http" = 401
 
