@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inspect Pages account and project
+      - name: Inspect Pages account project domains and live pages.dev
         id: inspect
         continue-on-error: true
         env:
@@ -54,6 +54,20 @@ jobs:
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
               "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains")
             echo "domains_http=$domains_http" >> "$GITHUB_OUTPUT"
+
+            deployments_http=$(curl -sS --max-time 30 -o /tmp/cs-pages/deployments.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/deployments?env=production&per_page=5")
+            echo "deployments_http=$deployments_http" >> "$GITHUB_OUTPUT"
+
+            BASE="https://${PROJECT}.pages.dev"
+            home_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/home.html -w '%{http_code}' "$BASE/")
+            services_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/services.html -w '%{http_code}' "$BASE/servicos/")
+            sectors_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/sectors.html -w '%{http_code}' "$BASE/setores/")
+            calculator_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/calculator.html -w '%{http_code}' "$BASE/calculadora/")
+            assistant_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/assistant.html -w '%{http_code}' "$BASE/assistente/")
+            privacy_http=$(curl -sS -L --max-time 30 -o /tmp/cs-pages/privacy.html -w '%{http_code}' "$BASE/privacidade/")
+            for pair in "home_http=$home_http" "services_http=$services_http" "sectors_http=$sectors_http" "calculator_http=$calculator_http" "assistant_http=$assistant_http" "privacy_http=$privacy_http"; do echo "$pair" >> "$GITHUB_OUTPUT"; done
           fi
 
       - name: Persist Pages preflight
@@ -63,20 +77,40 @@ jobs:
           PROJECTS_HTTP: ${{ steps.inspect.outputs.projects_http }}
           PROJECT: ${{ steps.inspect.outputs.project }}
           DOMAINS_HTTP: ${{ steps.inspect.outputs.domains_http }}
+          DEPLOYMENTS_HTTP: ${{ steps.inspect.outputs.deployments_http }}
+          HOME_HTTP: ${{ steps.inspect.outputs.home_http }}
+          SERVICES_HTTP: ${{ steps.inspect.outputs.services_http }}
+          SECTORS_HTTP: ${{ steps.inspect.outputs.sectors_http }}
+          CALCULATOR_HTTP: ${{ steps.inspect.outputs.calculator_http }}
+          ASSISTANT_HTTP: ${{ steps.inspect.outputs.assistant_http }}
+          PRIVACY_HTTP: ${{ steps.inspect.outputs.privacy_http }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           node - <<'NODE'
           const fs=require('fs'),e=process.env;
           const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const text=(p)=>{try{return fs.readFileSync(p,'utf8')}catch{return ''}};
           const projects=read('/tmp/cs-pages/projects.json');
           const domains=read('/tmp/cs-pages/domains.json');
+          const deployments=read('/tmp/cs-pages/deployments.json');
           const safeErrors=(x)=>Array.isArray(x?.errors)?x.errors.map(v=>({code:v.code,message:String(v.message||'').slice(0,200)})):[];
-          const projectList=Array.isArray(projects.result)?projects.result.map(p=>({name:p.name,productionBranch:p.production_branch||'',subdomain:p.subdomain||''})):[];
-          const domainList=Array.isArray(domains.result)?domains.result.map(d=>({name:d.name,status:d.status||'',verificationStatus:d.verification_data?.status||''})):[];
+          const projectList=Array.isArray(projects.result)?projects.result.map(p=>({name:p.name,productionBranch:p.production_branch||'',subdomain:p.subdomain||'',latestDeployment:{id:p.latest_deployment?.id||'',url:p.latest_deployment?.url||'',environment:p.latest_deployment?.environment||'',createdOn:p.latest_deployment?.created_on||'',commitHash:p.latest_deployment?.deployment_trigger?.metadata?.commit_hash||''}})):[];
+          const domainList=Array.isArray(domains.result)?domains.result.map(d=>({name:d.name,status:d.status||'',verificationStatus:d.verification_data?.status||'',verificationError:d.verification_data?.error_message||''})):[];
+          const deploymentList=Array.isArray(deployments.result)?deployments.result.slice(0,5).map(d=>({id:d.id||'',url:d.url||'',environment:d.environment||'',createdOn:d.created_on||'',commitHash:d.deployment_trigger?.metadata?.commit_hash||'',stage:d.latest_stage?.name||'',stageStatus:d.latest_stage?.status||''})):[];
+          const live={
+            base:e.PROJECT?`https://${e.PROJECT}.pages.dev`:'',
+            home:{http:Number(e.HOME_HTTP||0),leadCapture:text('/tmp/cs-pages/home.html').includes('cs-home-lead-form')},
+            services:{http:Number(e.SERVICES_HTTP||0),aeo:text('/tmp/cs-pages/services.html').includes('cs-services-aeo')},
+            sectors:{http:Number(e.SECTORS_HTTP||0),expected:text('/tmp/cs-pages/sectors.html').toLowerCase().includes('sistemas sob medida para o agronegócio')},
+            calculator:{http:Number(e.CALCULATOR_HTTP||0),expected:text('/tmp/cs-pages/calculator.html').toLowerCase().includes('quanto custa construir seu sistema')},
+            assistant:{http:Number(e.ASSISTANT_HTTP||0),expected:text('/tmp/cs-pages/assistant.html').includes('Registrar e pedir retorno')},
+            privacy:{http:Number(e.PRIVACY_HTTP||0),expected:text('/tmp/cs-pages/privacy.html').toLowerCase().includes('privacidade')}
+          };
           const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             credentialsConfigured:e.CONFIGURED==='true',projectsHttp:Number(e.PROJECTS_HTTP||0),projectsApiSuccess:projects.success===true,
             projectFound:Boolean(e.PROJECT),project:e.PROJECT||'',projects:projectList,projectsErrors:safeErrors(projects),
-            domainsHttp:Number(e.DOMAINS_HTTP||0),domainsApiSuccess:domains.success===true,domains:domainList,domainsErrors:safeErrors(domains)};
+            domainsHttp:Number(e.DOMAINS_HTTP||0),domainsApiSuccess:domains.success===true,domains:domainList,domainsErrors:safeErrors(domains),
+            deploymentsHttp:Number(e.DEPLOYMENTS_HTTP||0),deploymentsApiSuccess:deployments.success===true,deployments:deploymentList,deploymentsErrors:safeErrors(deployments),live};
           fs.mkdirSync('docs',{recursive:true});
           fs.writeFileSync('docs/pages-preflight-status.json',JSON.stringify(out,null,2)+'\n');
           NODE
