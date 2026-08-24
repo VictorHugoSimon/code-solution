@@ -2,87 +2,102 @@
 
 Este repositório é a fonte versionada da operação digital da Code Solution.
 
-## Estado atual
+## Status de produção
 
-### Código e build
-- pipeline de conteúdo com validação e geração do `content/blog/index.json`;
-- blog estático multilíngue (PT/EN/ES) com canonical, hreflang, `BlogPosting` e sitemap;
-- preparação SEO/AEO da Home, Serviços e Blog;
-- página `/setores/` com soluções para Agro, Logística e Varejo;
-- página `/calculadora/` com estimativa de faixa de projeto;
-- landing `/diagnostico/` com score local 0–100 e CTA para WhatsApp, sem armazenamento das respostas do diagnóstico;
-- assistente `/assistente/` com conversa Codi e captura voluntária de lead com consentimento para o CRM;
-- página `/privacidade/`;
-- CRM Kanban em `/painel/crm/` com 12 etapas, Lead Score, timeline, responsável, próxima ação, vencimento, valor, previsão e motivo de perda;
-- schema D1 em `crm/migrations/0001_init.sql`;
-- autenticação de `/painel/*` na borda do Pages e proxy same-origin `/api/crm/*`, sem expor `CRM_ADMIN_KEY` no JavaScript;
-- redirect canônico preparado para `codesolution.com.br` → `www.codesolution.com.br`;
-- deploy Workers capaz de provisionar D1, aplicar schema, publicar e executar smoke test;
-- deploy Pages capaz de construir, preparar SEO/AEO, publicar e executar smoke test;
-- smoke público persistido em `docs/public-smoke-status.json`.
+**Produção lançada em 24/08/2026.**
 
-### Produção observada
-- `https://www.codesolution.com.br/` responde;
-- `https://www.codesolution.com.br/servicos/` responde;
-- os Workers públicos respondem no subdomínio `victorhugoteixeirasimon6.workers.dev`;
-- as versões públicas dos Workers ainda são anteriores ao build atual do repositório;
-- as novas rotas estáticas dependem do próximo deploy do Cloudflare Pages;
-- o domínio sem `www` ainda precisa receber o deploy/roteamento novo para executar o redirect 301 preparado na borda.
+A operação digital está publicada na conta pessoal Cloudflare `Victorhugoteixeirasimon6@gmail.com's Account`, Account ID `cad25fe6c91871bbafb58236cf9b9b81`, com domínio, Pages, D1, KV e Workers validados.
 
-### Bloqueio de deploy do GitHub Actions
-O repositório precisa dos repository secrets:
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-
-Nunca coloque esses valores em commit, issue, arquivo versionado ou chat.
-
-Depois que ambos existirem, os workflows de Pages e Workers executam a automação de publicação. O workflow de Workers também cria/localiza `code-solution-crm`, aplica a migration e injeta o binding D1 no deploy do atendente.
-
-## Runtime secrets esperados no Cloudflare
-
-### `code-solution-robo`
-- `AI_API_KEY`
-- `GITHUB_TOKEN`
-- `MANUAL_KEY` para `/run` manual
-
-Artigos normais usam sitemap/crawl para descoberta e indexação. A Google Indexing API não faz parte deste fluxo.
-
-### `code-solution-atendente`
-- `AI_API_KEY`
-- `CRM_ADMIN_KEY`
-- opcionais para notificação WhatsApp: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `OWNER_WHATSAPP`
-
-O workflow pode sincronizar esses valores a partir de GitHub Actions Secrets quando eles existirem, sem versioná-los.
+### Plataforma publicada
+- Home institucional com captura direta de lead;
+- Serviços com camada SEO/AEO;
+- soluções por Setor para Agro, Logística e Varejo;
+- Calculadora de Projeto;
+- Diagnóstico Digital com score 0–100;
+- Assistente digital **Code Solution** com IA e captura voluntária de lead;
+- Privacidade;
+- Blog estático multilíngue PT/EN/ES;
+- Painel operacional;
+- CRM Kanban com 12 etapas, Lead Score, timeline, responsável, próxima ação, vencimento, valor, previsão e motivo de perda;
+- Painel de Marketing;
+- Painel de Inteligência;
+- D1 `code-solution-crm`;
+- Worker de conteúdo `code-solution-robo`;
+- Worker de atendimento `code-solution-atendente`;
+- Workers AI como provedor principal do assistente;
+- redirect canônico `codesolution.com.br` → `www.codesolution.com.br`.
 
 ## URLs operacionais
-- Site: `https://www.codesolution.com.br/`
+- Site oficial: `https://www.codesolution.com.br/`
 - Serviços: `https://www.codesolution.com.br/servicos/`
 - Setores: `https://www.codesolution.com.br/setores/`
 - Calculadora: `https://www.codesolution.com.br/calculadora/`
 - Diagnóstico: `https://www.codesolution.com.br/diagnostico/`
-- Codi: `https://www.codesolution.com.br/assistente/`
+- Assistente Code Solution: `https://www.codesolution.com.br/assistente/`
 - Privacidade: `https://www.codesolution.com.br/privacidade/`
+- Painel: `https://www.codesolution.com.br/painel/`
 - CRM: `https://www.codesolution.com.br/painel/crm/`
+- Marketing: `https://www.codesolution.com.br/painel/marketing/`
+- Inteligência: `https://www.codesolution.com.br/painel/inteligencia/`
 - Content Worker: `https://code-solution-robo.victorhugoteixeirasimon6.workers.dev`
 - Attendant Worker: `https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev`
+
+## Arquitetura e segurança
+- GitHub oficial: `VictorHugoSimon/code-solution`;
+- Cloudflare oficial: Account ID `cad25fe6c91871bbafb58236cf9b9b81`;
+- workflow de ownership impede deploy em uma conta Cloudflare diferente da conta pessoal oficial;
+- segredos ficam apenas em GitHub Actions Secrets ou Cloudflare runtime secrets;
+- `/painel/*` usa proteção na borda e recebe `noindex`, `noarchive` e `Cache-Control: no-store`;
+- a API do CRM exige `CRM_ADMIN_KEY` no upstream;
+- CRM anônimo retorna HTTP 401;
+- lead inválido retorna HTTP 400 `validation_error` antes da escrita;
+- o domínio raiz retorna HTTP 301 para `https://www.codesolution.com.br/`;
+- MX/TXT de e-mail Zoho são preservados no DNS.
+
+## Runtime secrets
+
+### `code-solution-robo`
+- `AI_API_KEY`
+- `GITHUB_TOKEN`
+- `MANUAL_KEY`
+
+### `code-solution-atendente`
+- `AI_API_KEY` para fallback externo opcional;
+- `CRM_ADMIN_KEY`;
+- opcionais para WhatsApp Cloud API: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `OWNER_WHATSAPP`.
+
+O assistente usa Cloudflare Workers AI como provedor principal. Provedores externos podem ser mantidos apenas como fallback.
+
+## Pipeline de release
+- build e validação de conteúdo;
+- geração de blog e sitemap;
+- preparação SEO/AEO;
+- aplicação obrigatória da marca **Code Solution** nas superfícies públicas;
+- validação que bloqueia a presença pública do nome legado do assistente;
+- deploy automático para Cloudflare Pages;
+- deploy automático dos Workers;
+- smoke das rotas públicas;
+- smoke do assistente, lead e CRM;
+- validação de redirect canônico;
+- proteção de ownership Cloudflare.
 
 ## Status auditável
 - `docs/content-integrity-status.json`
 - `docs/deployment-status.json`
 - `docs/pages-deployment-status.json`
 - `docs/public-smoke-status.json`
-- `docs/SOURCE-PACKAGE-MANIFEST.md`
+- `docs/dns-preflight-status.json`
+- `docs/crm-admin-validation.json`
+- `docs/cloudflare-footprint.json`
+- `docs/CLOUDFLARE-OWNERSHIP.md`
+- `docs/PRODUCTION-GAPS.md`
 
-## Segurança e privacidade
-- segredos ficam apenas em GitHub Actions Secrets ou Cloudflare runtime secrets;
-- `/painel/*` exige autenticação na borda e recebe `noindex`, `noarchive` e `Cache-Control: no-store`;
-- a API do CRM exige `CRM_ADMIN_KEY` no upstream e é acessada pelo navegador via proxy same-origin autenticado;
-- a landing de diagnóstico não transmite as respostas do questionário;
-- o Codi orienta a não enviar informações sensíveis;
-- cadastro de lead no Codi é voluntário, exige consentimento e envia somente os campos apresentados ao usuário.
+## Itens opcionais pós-lançamento
+- WhatsApp Cloud API para avisos automáticos de novos leads;
+- Meta Pixel quando o Pixel ID oficial estiver disponível;
+- evolução de analytics e automações comerciais.
 
-## Meta Pixel
-A infraestrutura de marketing está preparada para receber instrumentação, mas o Pixel ID real ainda não foi encontrado em fonte confiável. Não versionar um ID fictício. A instalação deve ocorrer quando o identificador oficial da conta Meta Business estiver disponível.
+Nenhum desses itens bloqueia o funcionamento atual da Produção.
 
 ## Comandos locais
 
