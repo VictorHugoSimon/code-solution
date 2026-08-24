@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-24T00:50:43.823Z",
-  "sourceCommit": "005cee7ad4cc85c603f73b2bd8485788da154cd3",
+  "checkedAt": "2026-08-24T00:51:37.748Z",
+  "sourceCommit": "d57db2b2160f750ad83531b9b6042fc1751913c6",
   "credentialsConfigured": true,
   "projectsHttp": 200,
   "projectsApiSuccess": true,
@@ -10,22 +10,50 @@
     {
       "name": "codesolution-site",
       "productionBranch": "main",
-      "subdomain": "codesolution-site.pages.dev"
+      "subdomain": "codesolution-site.pages.dev",
+      "latestDeployment": {
+        "id": "59535fbe-90f6-408e-b3a1-5c57fa86d2d4",
+        "url": "https://59535fbe.codesolution-site.pages.dev",
+        "environment": "preview",
+        "createdOn": "2026-08-24T00:33:45.432586Z",
+        "commitHash": "c35a2d2a4949f5a76511b42dfff6cf4a01e6ca19"
+      }
     },
     {
       "name": "ifarm-crm-painel",
       "productionBranch": "main",
-      "subdomain": "ifarm-crm-painel.pages.dev"
+      "subdomain": "ifarm-crm-painel.pages.dev",
+      "latestDeployment": {
+        "id": "833c8429-01a8-47ea-9a86-2f45b7ce44ae",
+        "url": "https://833c8429.ifarm-crm-painel.pages.dev",
+        "environment": "production",
+        "createdOn": "2026-08-07T10:13:32.946381Z",
+        "commitHash": "c7900a6889a63281408460fa220c5bdbc6a587d9"
+      }
     },
     {
       "name": "codesolution",
       "productionBranch": "main",
-      "subdomain": "codesolution.pages.dev"
+      "subdomain": "codesolution.pages.dev",
+      "latestDeployment": {
+        "id": "214802d8-f5c6-41ba-90b5-ecab031aa6f0",
+        "url": "https://214802d8.codesolution.pages.dev",
+        "environment": "production",
+        "createdOn": "2026-08-06T01:49:20.757082Z",
+        "commitHash": ""
+      }
     },
     {
       "name": "terra-pulse-painel",
       "productionBranch": "main",
-      "subdomain": "terra-pulse-painel.pages.dev"
+      "subdomain": "terra-pulse-painel.pages.dev",
+      "latestDeployment": {
+        "id": "10cbcfd7-007c-4963-b7e6-d4478ea28a39",
+        "url": "https://10cbcfd7.terra-pulse-painel.pages.dev",
+        "environment": "production",
+        "createdOn": "2026-07-26T14:11:57.916966Z",
+        "commitHash": "70ed9d1d360e993a3879c8e0a77549b2880ed340"
+      }
     }
   ],
   "projectsErrors": [],
@@ -35,13 +63,46 @@
     {
       "name": "codesolution.com.br",
       "status": "pending",
-      "verificationStatus": "pending"
+      "verificationStatus": "pending",
+      "verificationError": "CNAME record not set"
     },
     {
       "name": "www.codesolution.com.br",
       "status": "pending",
-      "verificationStatus": "pending"
+      "verificationStatus": "pending",
+      "verificationError": "CNAME record not set"
     }
   ],
-  "domainsErrors": []
+  "domainsErrors": [],
+  "deploymentsHttp": 200,
+  "deploymentsApiSuccess": true,
+  "deployments": [],
+  "deploymentsErrors": [],
+  "live": {
+    "base": "https://codesolution-site.pages.dev",
+    "home": {
+      "http": 404,
+      "leadCapture": false
+    },
+    "services": {
+      "http": 404,
+      "aeo": false
+    },
+    "sectors": {
+      "http": 404,
+      "expected": false
+    },
+    "calculator": {
+      "http": 404,
+      "expected": false
+    },
+    "assistant": {
+      "http": 404,
+      "expected": false
+    },
+    "privacy": {
+      "http": 404,
+      "expected": false
+    }
+  }
 }
