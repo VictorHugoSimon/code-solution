@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-24T19:13:00.100Z",
-  "sourceCommit": "10a647fab5fce3642666cd1afc1625d2882aecf0",
+  "checkedAt": "2026-08-24T19:15:52.709Z",
+  "sourceCommit": "d0f8e75e146a8c50389691bcdbd6c727564d0dbf",
   "cloudflareSecretsConfigured": "true",
   "crmD1Provision": "success",
   "crmD1DatabaseId": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d",
