@@ -1,5 +1,6 @@
 name: Diagnose Code Solution DNS
 
+# Recheck trigger 2026-08-24: validate current DNS permission before any mutation.
 on:
   push:
     branches: [main]
