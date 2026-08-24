@@ -64,6 +64,7 @@ jobs:
         continue-on-error: true
         if: steps.pages_prepare.outcome == 'success'
         run: |
+          set -euo pipefail
           test -f deploy/index.html
           test -f deploy/servicos/index.html
           test -f deploy/setores/index.html
@@ -84,6 +85,8 @@ jobs:
           grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
           grep -qi 'Diagnóstico Digital' deploy/diagnostico/index.html
           grep -qi 'Code Solution' deploy/assistente/index.html
+          grep -qi 'Acesso ao CRM' deploy/_worker.js
+          grep -qi 'cs_panel_session' deploy/_worker.js
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in assistant'; exit 1; fi
           grep -qi 'Privacidade' deploy/privacidade/index.html
 
@@ -116,7 +119,8 @@ jobs:
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             workerSyntax:e.WORKER_OUTCOME,crmSchema:e.SCHEMA_OUTCOME,
             blogIndexBuild:e.BLOG_OUTCOME,staticBlogBuild:e.STATIC_OUTCOME,
-            pagesPreparation:e.PAGES_OUTCOME,productionSurfaces:e.SURFACES_OUTCOME
+            pagesPreparation:e.PAGES_OUTCOME,productionSurfaces:e.SURFACES_OUTCOME,
+            releaseOwner:'deploy-pages.yml'
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution CI Bot"
@@ -143,175 +147,3 @@ jobs:
           test "$STATIC_OUTCOME" = success
           test "$PAGES_OUTCOME" = success
           test "$SURFACES_OUTCOME" = success
-
-  release_pages:
-    needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Use latest generated main
-        run: |
-          git fetch origin main
-          git checkout --detach origin/main
-
-      - name: Rebuild release bundle
-        run: |
-          npm run blog:index
-          npm run blog:static
-          npm run pages:prepare
-          npm run check:bundled-surfaces
-          node --check deploy/_worker.js
-          test -f deploy/setores/index.html
-          test -f deploy/calculadora/index.html
-          test -f deploy/diagnostico/index.html
-          test -f deploy/assistente/index.html
-          test -f deploy/privacidade/index.html
-          test -f deploy/painel/index.html
-          test -f deploy/painel/crm/index.html
-          test -f deploy/painel/marketing/index.html
-          test -f deploy/painel/inteligencia/index.html
-          grep -qi 'Code Solution' deploy/assistente/index.html
-          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in release bundle'; exit 1; fi
-
-      - name: Detect Cloudflare credentials
-        id: cf
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Pages pronto, mas credenciais Cloudflare ainda não existem no GitHub."
-          fi
-
-      - name: Resolve Pages project
-        id: project
-        if: steps.cf.outputs.configured == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          npx wrangler@4 pages project list --json >/tmp/projects.json
-          project=$(node - <<'NODE'
-          const x=require('/tmp/projects.json');const a=Array.isArray(x)?x:(x.result||x.projects||[]);const n=a.map(v=>v.name||v.project_name);
-          process.stdout.write(n.includes('codesolution-site')?'codesolution-site':n.includes('codesolution')?'codesolution':'');
-          NODE
-          )
-          if [ -z "$project" ]; then
-            project=codesolution-site
-            npx wrangler@4 pages project create "$project" --production-branch main
-          fi
-          echo "name=$project" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy Pages production
-        id: deploy
-        if: steps.cf.outputs.configured == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ steps.project.outputs.name }}
-        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT"
-
-      - name: Ensure custom domains
-        id: domains
-        if: steps.cf.outputs.configured == 'true' && steps.deploy.outcome == 'success'
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ steps.project.outputs.name }}
-        run: |
-          set -euo pipefail
-          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains"
-          curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$api" >/tmp/domains.json
-          for domain in www.codesolution.com.br codesolution.com.br; do
-            exists=$(DOMAIN="$domain" node -e "const x=require('/tmp/domains.json');process.stdout.write((x.result||[]).some(d=>d.name===process.env.DOMAIN)?'yes':'no')")
-            if [ "$exists" != yes ]; then
-              curl -fsS -X POST "$api" -H 'Content-Type: application/json' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" --data "{\"name\":\"${domain}\"}" >/tmp/add-domain.json
-            fi
-          done
-
-      - name: Public release smoke
-        id: smoke
-        if: steps.cf.outputs.configured == 'true' && steps.deploy.outcome == 'success'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          sleep 15
-          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /painel/ /painel/marketing/ /painel/inteligencia/ /sitemap.xml; do
-            curl -LfsS --retry 5 --retry-delay 4 "https://www.codesolution.com.br${path}" >/tmp/page.out
-          done
-          curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
-          curl -LfsS https://www.codesolution.com.br/setores/ | grep -qi 'Sistemas sob medida para o agronegócio'
-          curl -LfsS https://www.codesolution.com.br/calculadora/ | grep -qi 'Quanto custa construir seu sistema'
-          curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant-live.html
-          grep -qi 'Code Solution' /tmp/assistant-live.html
-          if grep -qi '\bCodi\b' /tmp/assistant-live.html; then echo '::error::Legacy Codi branding is still public'; exit 1; fi
-          panel_http=$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/crm/)
-          test "$panel_http" = 401
-
-      - name: Check apex canonical redirect
-        id: apex
-        if: steps.cf.outputs.configured == 'true' && steps.deploy.outcome == 'success'
-        continue-on-error: true
-        run: |
-          h=$(mktemp); curl -sS --max-time 20 -D "$h" -o /dev/null https://codesolution.com.br/ || true
-          http=$(head -n1 "$h" | awk '{print $2}')
-          location=$(grep -i '^location:' "$h" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          echo "http=$http" >> "$GITHUB_OUTPUT"
-          echo "location=$location" >> "$GITHUB_OUTPUT"
-          if [ "$http" = 301 ] && echo "$location" | grep -q '^https://www.codesolution.com.br/'; then exit 0; fi
-          exit 1
-
-      - name: Persist Pages deployment status
-        if: always()
-        env:
-          CONFIGURED: ${{ steps.cf.outputs.configured }}
-          PROJECT: ${{ steps.project.outputs.name }}
-          DEPLOY: ${{ steps.deploy.outcome }}
-          DOMAINS: ${{ steps.domains.outcome }}
-          SMOKE: ${{ steps.smoke.outcome }}
-          APEX: ${{ steps.apex.outcome }}
-          APEX_HTTP: ${{ steps.apex.outputs.http }}
-          APEX_LOCATION: ${{ steps.apex.outputs.location }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:'success',
-            cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
-            pagesDeploy:e.DEPLOY||'skipped',customDomains:e.DOMAINS||'skipped',publicSmokeTest:e.SMOKE||'skipped',
-            apexRedirect:e.APEX||'skipped',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
-            deploymentMode:'integrity-pipeline-direct-upload-production'
-          },null,2)+'\n');
-          NODE
-          git config user.name "Code Solution Release Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/pages-deployment-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: record Pages deployment status"
-          git pull --rebase origin main
-          git push origin HEAD:main
-
-      - name: Enforce deployment only when credentials exist
-        if: always()
-        env:
-          CONFIGURED: ${{ steps.cf.outputs.configured }}
-          DEPLOY: ${{ steps.deploy.outcome }}
-          SMOKE: ${{ steps.smoke.outcome }}
-        run: |
-          if [ "$CONFIGURED" = true ]; then
-            test "$DEPLOY" = success
-            test "$SMOKE" = success
-          fi
