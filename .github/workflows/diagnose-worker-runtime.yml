@@ -1,5 +1,6 @@
 name: Diagnose Worker runtime secrets
 
+# Re-run marker: CRM_ADMIN_KEY sync verification 2026-08-24
 on:
   push:
     branches: [main]
