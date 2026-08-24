@@ -1,0 +1,62 @@
+name: Validate Code Solution CRM admin authentication
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-crm-admin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-codesolution-crm-admin
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate anonymous and authenticated CRM access
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          BASE='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+
+          unauth_http=$(curl -sS --max-time 25 -o /tmp/crm-unauth.json -w '%{http_code}' "$BASE/crm/summary")
+          auth_http=$(curl -sS --max-time 25 -o /tmp/crm-auth.json -w '%{http_code}' "$BASE/crm/summary" -H "x-crm-key: ${CRM_ADMIN_KEY}")
+
+          test "$unauth_http" = 401
+          test "$auth_http" = 200
+
+          UNAUTH_HTTP="$unauth_http" AUTH_HTTP="$auth_http" node - <<'NODE'
+          const fs=require('fs');
+          const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const unauth=read('/tmp/crm-unauth.json'),auth=read('/tmp/crm-auth.json');
+          if(unauth.ok!==false || unauth.error!=='unauthorized') throw new Error('anonymous CRM contract invalid');
+          if(auth.ok!==true || typeof auth.totalLeads!=='number' || typeof auth.byStage!=='object') throw new Error('authenticated CRM summary invalid');
+          const out={
+            checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,
+            unauthenticated:{http:Number(process.env.UNAUTH_HTTP),expected401:true},
+            authenticated:{http:Number(process.env.AUTH_HTTP),success:true,totalLeads:auth.totalLeads,averageScore:auth.averageScore,overdueFollowUps:auth.overdueFollowUps,withoutNextAction:auth.withoutNextAction},
+            secretExposed:false
+          };
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/crm-admin-validation.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Persist validation result
+        run: |
+          git config user.name "Code Solution CRM Validation Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/crm-admin-validation.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record CRM admin validation"
+          git pull --rebase origin main
+          git push origin HEAD:main
