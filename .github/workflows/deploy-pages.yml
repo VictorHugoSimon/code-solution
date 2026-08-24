@@ -1,9 +1,12 @@
-name: Deploy Cloudflare Pages (manual fallback)
+name: Deploy Cloudflare Pages
 
 on:
   push:
     branches: [main]
     paths:
+      - 'deploy/**'
+      - 'scripts/**'
+      - 'package.json'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -11,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: deploy-pages-manual
+  group: deploy-pages-production
   cancel-in-progress: true
 
 jobs:
@@ -151,7 +154,7 @@ jobs:
             build:e.BUILD||'failure',cloudflareSecretsConfigured:e.CONFIGURED||'false',project:e.PROJECT||'',
             pagesDeploy:e.PAGES||'skipped',customDomains:e.DOMAINS||'skipped',publicSmokeTest:e.SMOKE||'skipped',
             apexRedirect:e.APEX||'skipped',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
-            deploymentMode:'manual-fallback-direct-upload-production'
+            deploymentMode:'automatic-or-manual-direct-upload-production'
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution Pages Deploy Bot"
