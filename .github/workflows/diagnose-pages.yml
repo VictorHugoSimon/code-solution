@@ -1,0 +1,89 @@
+name: Diagnose Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diagnose-pages
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect Pages account and project
+        id: inspect
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          mkdir -p /tmp/cs-pages
+          configured=false
+          [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && configured=true
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+          if [ "$configured" != true ]; then exit 0; fi
+
+          projects_http=$(curl -sS --max-time 30 -o /tmp/cs-pages/projects.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects")
+          echo "projects_http=$projects_http" >> "$GITHUB_OUTPUT"
+
+          PROJECT=$(node - <<'NODE'
+          const fs=require('fs');let x={};try{x=JSON.parse(fs.readFileSync('/tmp/cs-pages/projects.json','utf8'))}catch{}
+          const a=Array.isArray(x.result)?x.result:[];
+          const p=a.find(v=>v.name==='codesolution-site')||a.find(v=>v.name==='codesolution');
+          process.stdout.write(p?.name||'');
+          NODE
+          )
+          echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$PROJECT" ]; then
+            domains_http=$(curl -sS --max-time 30 -o /tmp/cs-pages/domains.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains")
+            echo "domains_http=$domains_http" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Persist Pages preflight
+        if: always()
+        env:
+          CONFIGURED: ${{ steps.inspect.outputs.configured }}
+          PROJECTS_HTTP: ${{ steps.inspect.outputs.projects_http }}
+          PROJECT: ${{ steps.inspect.outputs.project }}
+          DOMAINS_HTTP: ${{ steps.inspect.outputs.domains_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const projects=read('/tmp/cs-pages/projects.json');
+          const domains=read('/tmp/cs-pages/domains.json');
+          const safeErrors=(x)=>Array.isArray(x?.errors)?x.errors.map(v=>({code:v.code,message:String(v.message||'').slice(0,200)})):[];
+          const projectList=Array.isArray(projects.result)?projects.result.map(p=>({name:p.name,productionBranch:p.production_branch||'',subdomain:p.subdomain||''})):[];
+          const domainList=Array.isArray(domains.result)?domains.result.map(d=>({name:d.name,status:d.status||'',verificationStatus:d.verification_data?.status||''})):[];
+          const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            credentialsConfigured:e.CONFIGURED==='true',projectsHttp:Number(e.PROJECTS_HTTP||0),projectsApiSuccess:projects.success===true,
+            projectFound:Boolean(e.PROJECT),project:e.PROJECT||'',projects:projectList,projectsErrors:safeErrors(projects),
+            domainsHttp:Number(e.DOMAINS_HTTP||0),domainsApiSuccess:domains.success===true,domains:domainList,domainsErrors:safeErrors(domains)};
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/pages-preflight-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Pages Diagnostic Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/pages-preflight-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Pages preflight status"
+          git pull --rebase origin main
+          git push origin HEAD:main
