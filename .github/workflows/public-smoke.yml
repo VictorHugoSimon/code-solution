@@ -1,6 +1,5 @@
 name: Public production smoke
 
-# Recheck trigger 2026-08-24 16:03 BRT: full public validation after account/token review.
 on:
   workflow_dispatch:
   push:
@@ -9,6 +8,8 @@ on:
       - '.github/workflows/public-smoke.yml'
       - 'robo/**'
       - 'deploy/**'
+      - 'scripts/rebrand-code-solution.mjs'
+      - 'package.json'
 
 permissions:
   contents: write
@@ -20,144 +21,125 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Detect deployment credentials
-        id: credentials
+      - name: Validate public production and Code Solution branding
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN_PRESENT: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CF_ACCOUNT_PRESENT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          token_present=false; account_present=false; configured=false
-          [ -n "$CLOUDFLARE_API_TOKEN" ] && token_present=true
-          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && account_present=true
-          if [ "$token_present" = true ] && [ "$account_present" = true ]; then configured=true; fi
-          echo "configured=$configured" >> "$GITHUB_OUTPUT"
-          echo "token_present=$token_present" >> "$GITHUB_OUTPUT"
-          echo "account_present=$account_present" >> "$GITHUB_OUTPUT"
+          node - <<'NODE'
+          const fs = require('fs');
+          const pages = [
+            ['home','https://www.codesolution.com.br/','Code Solution'],
+            ['services','https://www.codesolution.com.br/servicos/','Servi'],
+            ['staticArticle','https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/','Cibersegurança e LGPD'],
+            ['diagnosticLanding','https://www.codesolution.com.br/diagnostico/','Diagnóstico Digital'],
+            ['standaloneAssistant','https://www.codesolution.com.br/assistente/','Code Solution'],
+            ['privacyPage','https://www.codesolution.com.br/privacidade/','Privacidade'],
+            ['sectorsPage','https://www.codesolution.com.br/setores/','Sistemas sob medida para o agronegócio'],
+            ['calculatorPage','https://www.codesolution.com.br/calculadora/','Quanto custa construir seu sistema'],
+          ];
+          const out = {
+            checkedAt: new Date().toISOString(),
+            sourceCommit: process.env.GITHUB_SHA,
+            cloudflareApiTokenPresent: process.env.CF_TOKEN_PRESENT === 'true',
+            cloudflareAccountIdPresent: process.env.CF_ACCOUNT_PRESENT === 'true',
+          };
+          const bodies = {};
+          for (const [key,url,pattern] of pages) {
+            try {
+              const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
+              const text = await r.text();
+              bodies[key] = text;
+              out[key] = r.ok && text.toLowerCase().includes(pattern.toLowerCase()) ? 'success' : 'failed';
+            } catch { out[key] = 'failed'; }
+          }
+          out.homeLeadCapture = /cs-home-lead-form/.test(bodies.home || '') ? 'success' : 'failed';
+          out.servicesAeo = /cs-services-aeo/.test(bodies.services || '') ? 'success' : 'failed';
+          out.assistantBranding = /Code Solution/i.test(bodies.standaloneAssistant || '') && !/\bCodi\b/.test(bodies.standaloneAssistant || '') ? 'success' : 'failed';
+          out.publicBrandingLegacyAbsent = Object.values(bodies).every((text) => !/\bCodi\b/.test(text)) ? 'success' : 'failed';
 
-      - name: Check public endpoints
-        id: check
-        continue-on-error: true
-        run: |
-          set +e
-          home=failed; services=failed; home_lead=failed; services_aeo=failed; article=failed; diagnosis=failed; assistant=failed; privacy=failed; sectors=failed; calculator=failed
-          apex_redirect=failed; apex_http=""; apex_location=""
-          robo=failed; robo_url=""; robo_build=""; robo_ready=""
-          attendant=failed; attendant_url=""; attendant_storage=""; attendant_chat=failed; chat_http=""; chat_error=""
-          attendant_lead_validation=skipped_legacy; lead_http=""; lead_error=""
+          try {
+            const apex = await fetch('https://codesolution.com.br/', { redirect: 'manual', signal: AbortSignal.timeout(20000) });
+            out.apexHttp = String(apex.status);
+            out.apexLocation = apex.headers.get('location') || '';
+            out.apexCanonicalRedirect = apex.status === 301 && out.apexLocation.startsWith('https://www.codesolution.com.br/') ? 'success' : 'failed';
+          } catch {
+            out.apexHttp = '';
+            out.apexLocation = '';
+            out.apexCanonicalRedirect = 'failed';
+          }
 
-          check_page(){ url="$1"; pattern="$2"; file="$3"; curl -L --fail --silent --show-error --max-time 20 "$url" >"$file" && grep -qi "$pattern" "$file"; }
-          check_page https://www.codesolution.com.br/ 'Code Solution' /tmp/home.html && home=success
-          check_page https://www.codesolution.com.br/servicos/ 'Servi' /tmp/services.html && services=success
-          [ "$home" = success ] && grep -q 'cs-home-lead-form' /tmp/home.html && home_lead=success
-          [ "$services" = success ] && grep -q 'cs-services-aeo' /tmp/services.html && services_aeo=success
-          check_page https://www.codesolution.com.br/blog/ciberseguranca-e-lgpd-para-pme/ 'Cibersegurança e LGPD' /tmp/article.html && article=success
-          check_page https://www.codesolution.com.br/diagnostico/ 'Diagnóstico Digital' /tmp/diagnostico.html && diagnosis=success
-          check_page https://www.codesolution.com.br/assistente/ 'Codi' /tmp/assistente.html && assistant=success
-          check_page https://www.codesolution.com.br/privacidade/ 'Privacidade' /tmp/privacidade.html && privacy=success
-          check_page https://www.codesolution.com.br/setores/ 'Sistemas sob medida para o agronegócio' /tmp/setores.html && sectors=success
-          check_page https://www.codesolution.com.br/calculadora/ 'Quanto custa construir seu sistema' /tmp/calculadora.html && calculator=success
+          const contentBase = 'https://code-solution-robo.victorhugoteixeirasimon6.workers.dev';
+          const attendantBase = 'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev';
+          try {
+            const r = await fetch(`${contentBase}/health`, { signal: AbortSignal.timeout(20000) });
+            const j = await r.json();
+            out.contentWorkerHealth = r.ok && j.ready === true ? 'success' : 'failed';
+            out.contentWorkerBuild = String(j.build || '');
+            out.contentWorkerReady = String(j.ready ?? '');
+          } catch { out.contentWorkerHealth = 'failed'; }
 
-          headers=$(mktemp)
-          curl --silent --show-error --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/ || true
-          apex_http=$(head -n1 "$headers" | awk '{print $2}')
-          apex_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          if [ "$apex_http" = 301 ] && echo "$apex_location" | grep -q '^https://www.codesolution.com.br/'; then apex_redirect=success; fi
+          try {
+            const r = await fetch(`${attendantBase}/health`, { signal: AbortSignal.timeout(20000) });
+            const j = await r.json();
+            out.attendantWorkerHealth = r.ok ? 'success' : 'failed';
+            out.attendantStorage = String(j.storage || '');
+          } catch { out.attendantWorkerHealth = 'failed'; }
 
-          for base in victorhugo1612 victorhugoteixeirasimon6; do
-            candidate="https://code-solution-robo.${base}.workers.dev/health"
-            if curl -LfsS --max-time 20 "$candidate" >/tmp/robo.json; then robo=success; robo_url="$candidate"; break; fi
-          done
-          for base in victorhugo1612 victorhugoteixeirasimon6; do
-            candidate="https://code-solution-atendente.${base}.workers.dev/health"
-            if curl -LfsS --max-time 20 "$candidate" >/tmp/atendente.json; then attendant=success; attendant_url="$candidate"; break; fi
-          done
+          try {
+            const r = await fetch(`${attendantBase}/chat`, {
+              method: 'POST',
+              headers: {'content-type':'application/json','origin':'https://www.codesolution.com.br'},
+              body: JSON.stringify({messages:[{role:'user',content:'Olá. Como a Code Solution pode ajudar minha empresa com automação?'}],context:{source:'production_smoke',consent:true}}),
+              signal: AbortSignal.timeout(35000),
+            });
+            const j = await r.json();
+            out.attendantChatHttp = String(r.status);
+            out.attendantChat = r.status === 200 && j.ok === true && typeof j.message === 'string' && j.message.length > 10 ? 'success' : 'failed';
+            out.chatBranding = out.attendantChat === 'success' && !/\bCodi\b/.test(String(j.message || '')) ? 'success' : 'failed';
+            out.attendantProvider = String(j.provider || '');
+            out.attendantRuntimeBuild = String(j.runtimeBuild || '');
+          } catch { out.attendantChat = 'failed'; out.chatBranding = 'failed'; out.attendantChatHttp = ''; }
 
-          if [ "$robo" = success ]; then
-            robo_build=$(node -e "try{const x=require('/tmp/robo.json');process.stdout.write(String(x.build||''))}catch{}")
-            robo_ready=$(node -e "try{const x=require('/tmp/robo.json');process.stdout.write(x.ready===undefined?'':String(x.ready))}catch{}")
-          fi
+          try {
+            const r = await fetch(`${attendantBase}/lead`, {
+              method:'POST', headers:{'content-type':'application/json','origin':'https://www.codesolution.com.br'},
+              body: JSON.stringify({name:'',whatsapp:'',need:''}), signal: AbortSignal.timeout(20000),
+            });
+            const j = await r.json();
+            out.attendantLeadValidationHttp = String(r.status);
+            out.attendantLeadValidationError = String(j.error || '');
+            out.attendantLeadValidation = r.status === 400 && j.error === 'validation_error' ? 'success' : 'failed';
+          } catch { out.attendantLeadValidation = 'failed'; }
 
-          if [ "$attendant" = success ]; then
-            attendant_storage=$(node -e "try{const x=require('/tmp/atendente.json');process.stdout.write(String(x.storage||''))}catch{}")
-            base_url="${attendant_url%/health}"
+          try {
+            const r = await fetch(`${attendantBase}/crm/summary`, { signal: AbortSignal.timeout(20000) });
+            out.crmAnonymousHttp = String(r.status);
+            out.crmAnonymousProtection = r.status === 401 ? 'success' : 'failed';
+          } catch { out.crmAnonymousProtection = 'failed'; }
 
-            chat_http=$(curl -sS --max-time 35 -o /tmp/chat.json -w '%{http_code}' "$base_url/chat" \
-              -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' \
-              --data '{"messages":[{"role":"user","content":"Olá. Quero entender como a Code Solution pode ajudar uma empresa com automação de processos."}],"context":{"source":"production_smoke","consent":true}}')
-            CHAT_HTTP="$chat_http" node -e "try{const x=require('/tmp/chat.json');if(process.env.CHAT_HTTP==='200'&&x.ok===true&&typeof x.message==='string'&&x.message.length>10)process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_chat=success
-            chat_error=$(node -e "try{const x=require('/tmp/chat.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
-
-            if [ "$attendant_storage" = d1 ]; then
-              attendant_lead_validation=failed
-              lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$base_url/lead" \
-                -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' \
-                --data '{"name":"","whatsapp":"","need":""}')
-              LEAD_HTTP="$lead_http" node -e "try{const x=require('/tmp/lead.json');if(process.env.LEAD_HTTP==='400'&&x.ok===false&&x.error==='validation_error')process.exit(0);process.exit(1)}catch{process.exit(1)}" && attendant_lead_validation=success
-              lead_error=$(node -e "try{const x=require('/tmp/lead.json');process.stdout.write(String(x.error||'').replace(/[^a-zA-Z0-9_.:-]/g,'').slice(0,80))}catch{}")
-            fi
-          fi
-
-          for pair in \
-            "home=$home" "services=$services" "home_lead=$home_lead" "services_aeo=$services_aeo" "article=$article" "diagnosis=$diagnosis" "assistant=$assistant" "privacy=$privacy" \
-            "sectors=$sectors" "calculator=$calculator" "apex_redirect=$apex_redirect" "apex_http=$apex_http" "apex_location=$apex_location" \
-            "robo=$robo" "robo_url=$robo_url" "robo_build=$robo_build" "robo_ready=$robo_ready" \
-            "attendant=$attendant" "attendant_url=$attendant_url" "attendant_storage=$attendant_storage" \
-            "attendant_chat=$attendant_chat" "chat_http=$chat_http" "chat_error=$chat_error" \
-            "attendant_lead_validation=$attendant_lead_validation" "lead_http=$lead_http" "lead_error=$lead_error"; do echo "$pair" >> "$GITHUB_OUTPUT"; done
+          const required = [
+            'home','services','homeLeadCapture','servicesAeo','staticArticle','diagnosticLanding','standaloneAssistant','privacyPage','sectorsPage','calculatorPage',
+            'assistantBranding','publicBrandingLegacyAbsent','apexCanonicalRedirect','contentWorkerHealth','attendantWorkerHealth','attendantChat','chatBranding','attendantLeadValidation','crmAnonymousProtection'
+          ];
+          const failed = required.filter((k) => out[k] !== 'success');
+          out.overall = failed.length ? 'failed' : 'success';
+          out.failedChecks = failed;
+          fs.mkdirSync('docs', { recursive: true });
+          fs.writeFileSync('docs/public-smoke-status.json', JSON.stringify(out, null, 2) + '\n');
+          if (failed.length) throw new Error(`Production smoke failed: ${failed.join(', ')}`);
+          NODE
 
       - name: Persist public status
         if: always()
-        env:
-          CF_CONFIGURED: ${{ steps.credentials.outputs.configured }}
-          CF_TOKEN_PRESENT: ${{ steps.credentials.outputs.token_present }}
-          CF_ACCOUNT_PRESENT: ${{ steps.credentials.outputs.account_present }}
-          HOME: ${{ steps.check.outputs.home }}
-          SERVICES: ${{ steps.check.outputs.services }}
-          HOME_LEAD: ${{ steps.check.outputs.home_lead }}
-          SERVICES_AEO: ${{ steps.check.outputs.services_aeo }}
-          ARTICLE: ${{ steps.check.outputs.article }}
-          DIAGNOSIS: ${{ steps.check.outputs.diagnosis }}
-          ASSISTANT: ${{ steps.check.outputs.assistant }}
-          PRIVACY: ${{ steps.check.outputs.privacy }}
-          SECTORS: ${{ steps.check.outputs.sectors }}
-          CALCULATOR: ${{ steps.check.outputs.calculator }}
-          APEX_REDIRECT: ${{ steps.check.outputs.apex_redirect }}
-          APEX_HTTP: ${{ steps.check.outputs.apex_http }}
-          APEX_LOCATION: ${{ steps.check.outputs.apex_location }}
-          ROBO: ${{ steps.check.outputs.robo }}
-          ROBO_URL: ${{ steps.check.outputs.robo_url }}
-          ROBO_BUILD: ${{ steps.check.outputs.robo_build }}
-          ROBO_READY: ${{ steps.check.outputs.robo_ready }}
-          ATTENDANT: ${{ steps.check.outputs.attendant }}
-          ATTENDANT_URL: ${{ steps.check.outputs.attendant_url }}
-          ATTENDANT_STORAGE: ${{ steps.check.outputs.attendant_storage }}
-          ATTENDANT_CHAT: ${{ steps.check.outputs.attendant_chat }}
-          CHAT_HTTP: ${{ steps.check.outputs.chat_http }}
-          CHAT_ERROR: ${{ steps.check.outputs.chat_error }}
-          ATTENDANT_LEAD_VALIDATION: ${{ steps.check.outputs.attendant_lead_validation }}
-          LEAD_HTTP: ${{ steps.check.outputs.lead_http }}
-          LEAD_ERROR: ${{ steps.check.outputs.lead_error }}
-          SOURCE_SHA: ${{ github.sha }}
         run: |
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          const out={
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            cloudflareSecretsConfigured:e.CF_CONFIGURED||'false',cloudflareApiTokenPresent:e.CF_TOKEN_PRESENT||'false',cloudflareAccountIdPresent:e.CF_ACCOUNT_PRESENT||'false',
-            home:e.HOME||'failed',services:e.SERVICES||'failed',homeLeadCapture:e.HOME_LEAD||'failed',servicesAeo:e.SERVICES_AEO||'failed',
-            staticArticle:e.ARTICLE||'failed',diagnosticLanding:e.DIAGNOSIS||'failed',standaloneAssistant:e.ASSISTANT||'failed',privacyPage:e.PRIVACY||'failed',sectorsPage:e.SECTORS||'failed',calculatorPage:e.CALCULATOR||'failed',
-            apexCanonicalRedirect:e.APEX_REDIRECT||'failed',apexHttp:e.APEX_HTTP||'',apexLocation:e.APEX_LOCATION||'',
-            contentWorkerHealth:e.ROBO||'failed',contentWorkerUrl:e.ROBO_URL||'',contentWorkerBuild:e.ROBO_BUILD||'',contentWorkerReady:e.ROBO_READY||'',
-            attendantWorkerHealth:e.ATTENDANT||'failed',attendantWorkerUrl:e.ATTENDANT_URL||'',attendantStorage:e.ATTENDANT_STORAGE||'',
-            attendantChat:e.ATTENDANT_CHAT||'failed',attendantChatHttp:e.CHAT_HTTP||'',attendantChatError:e.CHAT_ERROR||'',
-            attendantLeadValidation:e.ATTENDANT_LEAD_VALIDATION||'skipped_legacy',attendantLeadValidationHttp:e.LEAD_HTTP||'',attendantLeadValidationError:e.LEAD_ERROR||''
-          };
-          fs.writeFileSync('docs/public-smoke-status.json',JSON.stringify(out,null,2)+'\n');
-          NODE
           git config user.name "Code Solution Smoke Bot"
           git config user.email "actions@users.noreply.github.com"
           git add docs/public-smoke-status.json
