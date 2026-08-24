@@ -1,42 +1,52 @@
-# Gaps de Produção — atualizado em 24/08/2026
+# Produção Code Solution — validada em 24/08/2026
 
-## Resolvidos
+## Status geral
 
-- Índice do blog é reconstruído automaticamente e conteúdo inválido fica fora do índice.
-- Robô de conteúdo evita sobrescrever slug existente e a seleção de pauta não depende apenas do dia do mês.
-- CRM possui autenticação administrativa no backend, Lead Score, timeline, próxima ação e 12 etapas.
-- D1 `code-solution-crm` foi provisionado e está sendo usado pelo Worker atendente.
-- Workers de conteúdo e atendimento estão publicados via GitHub Actions.
-- Cloudflare Pages `codesolution-site` possui deployment de produção ativo.
-- Home, Serviços, Setores, Calculadora, Assistente e Privacidade estão disponíveis no `codesolution-site.pages.dev`.
-- Home possui captura direta de lead e Serviços possui camada AEO no bundle publicado.
-- Codi passou a usar Cloudflare Workers AI como provedor principal, reduzindo dependência de chave Groq externa.
-- O contrato de lead inválido continua bloqueando escrita antes do D1 (`400 validation_error`).
-- CRM anônimo continua bloqueado (`401 unauthorized`).
+**Produção operacional e validada.**
 
-## Bloqueios externos atuais
+## Ownership
 
-### 1. Domínio oficial / DNS
+- GitHub oficial: `VictorHugoSimon/code-solution`.
+- Cloudflare oficial: `Victorhugoteixeirasimon6@gmail.com's Account`.
+- Cloudflare Account ID: `cad25fe6c91871bbafb58236cf9b9b81`.
+- Zona `codesolution.com.br`, Pages, D1, KV e Workers foram confirmados na conta pessoal.
+- A conta Cloudflare do Instituto Államo foi auditada em modo somente leitura e não apresentou Pages, D1, Workers ou zona/domínio da Code Solution.
+- O workflow `.github/workflows/guard-cloudflare-account.yml` impede deploy da Code Solution em Account ID diferente da conta pessoal.
 
-O projeto Pages e os custom domains existem, porém `codesolution.com.br` e `www.codesolution.com.br` continuam pendentes com `CNAME record not set`.
+## Produção validada
 
-O token Cloudflare usado pelo GitHub consegue ler a zona, mas a API de DNS retorna `403 Authentication error`. É necessário acrescentar ao token acesso de DNS da zona `codesolution.com.br` antes de automatizar o apontamento para `codesolution-site.pages.dev`.
-
-### 2. Chave administrativa do CRM
-
-`CRM_ADMIN_KEY` ainda não está cadastrado como Repository Secret no GitHub. Enquanto estiver ausente, `/crm/*` permanece fechado para todos, inclusive o painel administrativo.
-
-Cadastrar um valor forte em GitHub → Settings → Secrets and variables → Actions → Repository secrets → `CRM_ADMIN_KEY`. O workflow de Workers já sincroniza esse secret para o Worker atendente sem gravá-lo no repositório.
+- Cloudflare Pages `codesolution-site` ativo, branch de produção `main`.
+- DNS API acessível com HTTP 200.
+- `codesolution.com.br` e `www.codesolution.com.br` usam CNAME proxied para `codesolution-site.pages.dev`.
+- Registros MX/TXT do Zoho e verificação do Google permaneceram preservados.
+- `codesolution.com.br` redireciona HTTP 301 para `https://www.codesolution.com.br/`.
+- Home, Serviços, captura de lead, AEO, artigo estático, Diagnóstico, Assistente, Privacidade, Setores e Calculadora passaram no smoke público.
+- D1 `code-solution-crm` ativo no Worker atendente.
+- Worker `code-solution-robo` healthy/ready.
+- Worker `code-solution-atendente` healthy com `storage=d1`.
+- Codi responde HTTP 200 usando Cloudflare Workers AI.
+- Payload de lead inválido é rejeitado com HTTP 400 + `validation_error` antes de gravação.
+- CRM sem credencial retorna HTTP 401.
+- CRM com `CRM_ADMIN_KEY` real do GitHub retorna HTTP 200 e resumo válido.
+- `CRM_ADMIN_KEY` está sincronizada no runtime do Worker e não foi exposta em logs/status.
 
 ## Itens opcionais, não bloqueadores
 
-- WhatsApp Cloud API: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` e `OWNER_WHATSAPP` para notificação automática de novos leads.
+- WhatsApp Cloud API: configurar `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` e `OWNER_WHATSAPP` para notificação automática de novos leads.
 - Meta Pixel: depende do Pixel ID oficial da conta Meta; não usar placeholder.
-- Groq: pode permanecer como fallback opcional; Codi não depende mais dele como provedor principal.
+- Groq pode permanecer como fallback opcional; Codi usa Workers AI como provedor principal.
+- O projeto Pages legado `codesolution` (`codesolution.pages.dev`) ainda existe na conta pessoal. Pode ser removido futuramente após confirmação de que nenhuma integração antiga depende dele; não é usado como target do domínio oficial.
 
-## Critério para declarar produção finalizada
+## Evidências
 
-1. DNS API acessível pelo token e `@`/`www` apontando corretamente para o Pages.
-2. `www.codesolution.com.br` servindo o novo site e `codesolution.com.br` redirecionando 301 para `www`.
-3. `CRM_ADMIN_KEY` configurado e `/painel/crm/` autenticando com sucesso.
-4. Smoke público verde para Home, Serviços, Setores, Calculadora, Diagnóstico, Assistente, Privacidade, artigo estático, Workers, Codi e contrato de lead.
+- `docs/cloudflare-footprint.json`
+- `docs/dns-preflight-status.json`
+- `docs/public-smoke-status.json`
+- `docs/deployment-status.json`
+- `docs/runtime-secrets-status.json`
+- `docs/crm-admin-validation.json`
+- `docs/CLOUDFLARE-OWNERSHIP.md`
+
+## Critério de produção
+
+Todos os critérios obrigatórios de produção foram atendidos em 24/08/2026. Os itens remanescentes acima são evoluções opcionais e não bloqueiam o uso da Code Solution em produção.
