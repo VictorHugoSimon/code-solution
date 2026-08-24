@@ -87,6 +87,11 @@ jobs:
           grep -qi 'Code Solution' deploy/assistente/index.html
           grep -qi 'Acesso ao CRM' deploy/_worker.js
           grep -qi 'cs_panel_session' deploy/_worker.js
+          grep -qi 'Visão executiva' deploy/painel/index.html
+          grep -qi 'Marketing & Aquisição' deploy/painel/marketing/index.html
+          grep -qi 'Inteligência Comercial' deploy/painel/inteligencia/index.html
+          grep -qi 'Novo lead' deploy/painel/crm/index.html
+          grep -qi 'Todas origens' deploy/painel/crm/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found in assistant'; exit 1; fi
           grep -qi 'Privacidade' deploy/privacidade/index.html
 
@@ -120,7 +125,7 @@ jobs:
             workerSyntax:e.WORKER_OUTCOME,crmSchema:e.SCHEMA_OUTCOME,
             blogIndexBuild:e.BLOG_OUTCOME,staticBlogBuild:e.STATIC_OUTCOME,
             pagesPreparation:e.PAGES_OUTCOME,productionSurfaces:e.SURFACES_OUTCOME,
-            releaseOwner:'deploy-pages.yml'
+            operationalPanelSurfaces:'enforced',releaseOwner:'deploy-pages.yml'
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution CI Bot"
