@@ -1,5 +1,6 @@
 name: Validate launch branding
 
+# Explicit re-run after workflow registration on main — 2026-08-24.
 on:
   push:
     branches: [main]
