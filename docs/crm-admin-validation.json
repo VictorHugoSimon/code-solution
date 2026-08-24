@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-08-24T19:07:17.431Z",
+  "sourceCommit": "d53c84829f09a4dff8703083deac5f61d6fcae5c",
+  "unauthenticated": {
+    "http": 401,
+    "expected401": true
+  },
+  "authenticated": {
+    "http": 200,
+    "success": true,
+    "totalLeads": 1,
+    "averageScore": 52,
+    "overdueFollowUps": 0,
+    "withoutNextAction": 0
+  },
+  "secretExposed": false
+}
