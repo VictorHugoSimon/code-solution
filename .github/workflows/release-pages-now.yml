@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --branch=main 2>&1 | tee /tmp/pages-deploy.log
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="Direct production release $GITHUB_SHA" 2>&1 | tee /tmp/pages-deploy.log
 
       - name: Inspect deployment after release
         id: inspect
