@@ -1,13 +1,17 @@
 import baseWorker from './atendente-worker.js';
 
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
-const RUNTIME_BUILD = 'codi-workers-ai-2026-08-24.1';
+const RUNTIME_BUILD = 'code-solution-workers-ai-2026-08-24.2';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname !== '/chat' || request.method !== 'POST' || !env.AI || typeof env.AI.run !== 'function') {
+    if (url.pathname !== '/chat' || request.method !== 'POST') {
       return baseWorker.fetch(request, env, ctx);
+    }
+
+    if (!env.AI || typeof env.AI.run !== 'function') {
+      return rebrandChatResponse(await baseWorker.fetch(request, env, ctx));
     }
 
     const fallbackRequest = request.clone();
@@ -19,7 +23,7 @@ export default {
       const latest = String(messages.at(-1)?.content || '');
       const handoffRequested = /\b(humano|pessoa|atendente|falar com algu[eé]m|suporte|reclama[cç][aã]o)\b/i.test(latest);
       const officeOpen = isBusinessHours();
-      const system = `Você é Codi, atendente consultivo da Code Solution. Fale em português do Brasil, com clareza e objetividade. Seu objetivo é entender a dor, identificar se é demanda empresarial, descobrir segmento e coletar nome + WhatsApp. Nunca invente preço, prazo ou capacidade. Quando houver dados suficientes, proponha uma próxima ação simples: diagnóstico/discovery com a equipe. Se a pessoa pedir atendimento humano, confirme a solicitação e não finja ser uma pessoa. Não peça dados sensíveis. Contexto já coletado: ${JSON.stringify(context)}.`;
+      const system = `Você é o assistente digital da Code Solution. Apresente-se sempre como Code Solution, nunca como Codi. Fale em português do Brasil, com clareza e objetividade. Seu objetivo é entender a dor, identificar se é demanda empresarial, descobrir segmento e coletar nome + WhatsApp. Nunca invente preço, prazo ou capacidade. Quando houver dados suficientes, proponha uma próxima ação simples: diagnóstico/discovery com a equipe. Se a pessoa pedir atendimento humano, confirme a solicitação e não finja ser uma pessoa. Não peça dados sensíveis. Contexto já coletado: ${JSON.stringify(context)}.`;
 
       const result = await env.AI.run(env.WORKERS_AI_MODEL || DEFAULT_WORKERS_AI_MODEL, {
         messages: [{ role: 'system', content: system }, ...messages.map(normalizeMessage)],
@@ -29,6 +33,7 @@ export default {
 
       let message = extractMessage(result);
       if (!message) throw new Error('workers_ai_empty_response');
+      message = message.replace(/\bCodi\b/g, 'Code Solution');
       if (handoffRequested && !officeOpen) {
         message += '\n\nSeu pedido de atendimento humano foi registrado. A equipe continuará no próximo período de atendimento.';
       }
@@ -42,10 +47,22 @@ export default {
       }, 200, cors);
     } catch (error) {
       console.warn('Workers AI chat failed; trying configured fallback provider.', String(error?.message || error));
-      return baseWorker.fetch(fallbackRequest, env, ctx);
+      return rebrandChatResponse(await baseWorker.fetch(fallbackRequest, env, ctx));
     }
   },
 };
+
+async function rebrandChatResponse(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return response;
+  const text = await response.text();
+  const branded = text.replace(/\bCodi\b/g, 'Code Solution');
+  return new Response(branded, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
 
 function extractMessage(result) {
   if (typeof result === 'string') return result.trim();
