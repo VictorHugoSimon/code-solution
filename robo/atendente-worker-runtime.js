@@ -1,11 +1,16 @@
 import baseWorker from './atendente-worker.js';
 
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
-const RUNTIME_BUILD = 'code-solution-workers-ai-2026-08-24.2';
+const RUNTIME_BUILD = 'code-solution-workers-ai-2026-08-24.3';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (url.pathname === '/lead' && request.method === 'POST') {
+      return createLeadWithCommercialSla(request, env, ctx);
+    }
+
     if (url.pathname !== '/chat' || request.method !== 'POST') {
       return baseWorker.fetch(request, env, ctx);
     }
@@ -52,6 +57,137 @@ export default {
   },
 };
 
+async function createLeadWithCommercialSla(request, env, ctx) {
+  const response = await baseWorker.fetch(request, env, ctx);
+  const contentType = response.headers.get('content-type') || '';
+  if (response.status !== 201 || !contentType.includes('application/json')) return response;
+
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { return cloneTextResponse(response, text); }
+  if (!data?.ok || !data?.leadId) return cloneJsonResponse(response, data);
+
+  const score = Number(data.score || 0);
+  const sla = commercialSla(score);
+  const now = new Date().toISOString();
+  try {
+    if (env.CRM_DB) {
+      await env.CRM_DB.prepare('UPDATE leads SET next_action_due = ?, updated_at = ? WHERE id = ?')
+        .bind(sla.dueDate, now, data.leadId).run();
+      await env.CRM_DB.prepare('INSERT INTO lead_events (id, lead_id, event_type, text, actor, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(
+          crypto.randomUUID(),
+          data.leadId,
+          'sla_assigned',
+          `SLA comercial automático definido para ${formatPtDate(sla.dueDate)} (${sla.label}).`,
+          'Code Solution',
+          JSON.stringify({ score, temperature: sla.temperature, dueDate: sla.dueDate, policy: sla.policy }),
+          now,
+        ).run();
+    } else if (env.LEADS_KV) {
+      const key = `lead:${data.leadId}`;
+      const raw = await env.LEADS_KV.get(key);
+      if (raw) {
+        const lead = JSON.parse(raw);
+        lead.nextActionDue = sla.dueDate;
+        lead.updatedAt = now;
+        lead.timeline = [...(Array.isArray(lead.timeline) ? lead.timeline : []), {
+          at: now,
+          type: 'sla_assigned',
+          text: `SLA comercial automático definido para ${formatPtDate(sla.dueDate)} (${sla.label}).`,
+        }].slice(-200);
+        await env.LEADS_KV.put(key, JSON.stringify(lead));
+      }
+    }
+    data.nextActionDue = sla.dueDate;
+    data.sla = { label: sla.label, policy: sla.policy, temperature: sla.temperature };
+  } catch (error) {
+    console.warn('Could not assign automatic lead SLA.', String(error?.message || error));
+  }
+
+  return cloneJsonResponse(response, data);
+}
+
+function commercialSla(score) {
+  const temperature = score >= 75 ? 'quente' : score >= 45 ? 'morno' : 'frio';
+  const nowInfo = saoPauloParts(new Date());
+  let cursor = saoPauloNoon(nowInfo.year, nowInfo.month, nowInfo.day);
+
+  if (isWeekend(cursor)) cursor = nextBusinessDay(cursor);
+
+  if (temperature === 'quente') {
+    if (nowInfo.weekday === 'Sat' || nowInfo.weekday === 'Sun' || nowInfo.hour >= 16) {
+      cursor = nextBusinessDay(cursor);
+    }
+    return { temperature, dueDate: saoPauloDate(cursor), label: 'mesmo dia útil', policy: 'hot_same_business_day' };
+  }
+
+  if (temperature === 'morno') {
+    cursor = addBusinessDays(cursor, 1);
+    return { temperature, dueDate: saoPauloDate(cursor), label: '1 dia útil', policy: 'warm_1_business_day' };
+  }
+
+  cursor = addBusinessDays(cursor, 3);
+  return { temperature, dueDate: saoPauloDate(cursor), label: '3 dias úteis', policy: 'cold_3_business_days' };
+}
+
+function addBusinessDays(date, days) {
+  let cursor = new Date(date);
+  let remaining = days;
+  while (remaining > 0) {
+    cursor = addCalendarDay(cursor);
+    if (!isWeekend(cursor)) remaining--;
+  }
+  return cursor;
+}
+
+function nextBusinessDay(date) {
+  let cursor = addCalendarDay(date);
+  while (isWeekend(cursor)) cursor = addCalendarDay(cursor);
+  return cursor;
+}
+
+function addCalendarDay(date) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+function isWeekend(date) {
+  const weekday = saoPauloParts(date).weekday;
+  return weekday === 'Sat' || weekday === 'Sun';
+}
+
+function saoPauloNoon(year, month, day) {
+  // 12:00 em São Paulo = 15:00 UTC no calendário atual (UTC-03:00).
+  return new Date(Date.UTC(year, month - 1, day, 15, 0, 0));
+}
+
+function saoPauloParts(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    weekday: get('weekday'),
+    hour: Number(get('hour')),
+  };
+}
+
+function saoPauloDate(date) {
+  const p = saoPauloParts(date);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+function formatPtDate(value) {
+  const [year, month, day] = String(value).split('-');
+  return `${day}/${month}/${year}`;
+}
+
 async function rebrandChatResponse(response) {
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) return response;
@@ -62,6 +198,16 @@ async function rebrandChatResponse(response) {
     statusText: response.statusText,
     headers: response.headers,
   });
+}
+
+function cloneTextResponse(source, text) {
+  return new Response(text, { status: source.status, statusText: source.statusText, headers: source.headers });
+}
+
+function cloneJsonResponse(source, data) {
+  const headers = new Headers(source.headers);
+  headers.set('content-type', 'application/json; charset=utf-8');
+  return new Response(JSON.stringify(data), { status: source.status, statusText: source.statusText, headers });
 }
 
 function extractMessage(result) {
