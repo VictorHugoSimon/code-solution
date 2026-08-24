@@ -1,6 +1,24 @@
 {
-  "generatedAt": "2026-08-24T00:53:09.376Z",
+  "generatedAt": "2026-08-24T12:01:22.057Z",
   "pages": [
+    {
+      "code": "pt",
+      "slug": "como-a-inteligencia-artificial-pode-transformar-processos-de-pmes",
+      "url": "https://www.codesolution.com.br/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/",
+      "date": "2026-08-24T12:01:07.521Z"
+    },
+    {
+      "code": "en",
+      "slug": "como-a-inteligencia-artificial-pode-transformar-processos-de-pmes",
+      "url": "https://www.codesolution.com.br/en/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/",
+      "date": "2026-08-24T12:01:07.521Z"
+    },
+    {
+      "code": "es",
+      "slug": "como-a-inteligencia-artificial-pode-transformar-processos-de-pmes",
+      "url": "https://www.codesolution.com.br/es/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/",
+      "date": "2026-08-24T12:01:07.521Z"
+    },
     {
       "code": "pt",
       "slug": "ciberseguranca-e-lgpd-para-pme",
