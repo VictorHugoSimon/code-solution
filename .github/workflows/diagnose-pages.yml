@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inspect Pages account project domains and live pages.dev
+      - name: Deploy and inspect Pages account project domains and live pages.dev
         id: inspect
         continue-on-error: true
         env:
@@ -49,6 +49,19 @@ jobs:
           )
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
 
+          deploy_exit=99
+          if [ "$PROJECT" = "codesolution-site" ]; then
+            timeout 120s npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$GITHUB_SHA" --commit-message="Verified production release $GITHUB_SHA" > /tmp/cs-pages/deploy.log 2>&1
+            deploy_exit=$?
+            echo "deploy_exit=$deploy_exit" >> "$GITHUB_OUTPUT"
+            sleep 6
+            curl -sS --max-time 30 -o /tmp/cs-pages/projects.json \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects" >/dev/null || true
+          else
+            echo "deploy_exit=$deploy_exit" >> "$GITHUB_OUTPUT"
+          fi
+
           if [ -n "$PROJECT" ]; then
             domains_http=$(curl -sS --max-time 30 -o /tmp/cs-pages/domains.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
@@ -57,7 +70,7 @@ jobs:
 
             deployments_http=$(curl -sS --max-time 30 -o /tmp/cs-pages/deployments.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/deployments?env=production&per_page=5")
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/deployments?per_page=10")
             echo "deployments_http=$deployments_http" >> "$GITHUB_OUTPUT"
 
             BASE="https://${PROJECT}.pages.dev"
@@ -76,6 +89,7 @@ jobs:
           CONFIGURED: ${{ steps.inspect.outputs.configured }}
           PROJECTS_HTTP: ${{ steps.inspect.outputs.projects_http }}
           PROJECT: ${{ steps.inspect.outputs.project }}
+          DEPLOY_EXIT: ${{ steps.inspect.outputs.deploy_exit }}
           DOMAINS_HTTP: ${{ steps.inspect.outputs.domains_http }}
           DEPLOYMENTS_HTTP: ${{ steps.inspect.outputs.deployments_http }}
           HOME_HTTP: ${{ steps.inspect.outputs.home_http }}
@@ -96,7 +110,7 @@ jobs:
           const safeErrors=(x)=>Array.isArray(x?.errors)?x.errors.map(v=>({code:v.code,message:String(v.message||'').slice(0,200)})):[];
           const projectList=Array.isArray(projects.result)?projects.result.map(p=>({name:p.name,productionBranch:p.production_branch||'',subdomain:p.subdomain||'',latestDeployment:{id:p.latest_deployment?.id||'',url:p.latest_deployment?.url||'',environment:p.latest_deployment?.environment||'',createdOn:p.latest_deployment?.created_on||'',commitHash:p.latest_deployment?.deployment_trigger?.metadata?.commit_hash||''}})):[];
           const domainList=Array.isArray(domains.result)?domains.result.map(d=>({name:d.name,status:d.status||'',verificationStatus:d.verification_data?.status||'',verificationError:d.verification_data?.error_message||''})):[];
-          const deploymentList=Array.isArray(deployments.result)?deployments.result.slice(0,5).map(d=>({id:d.id||'',url:d.url||'',environment:d.environment||'',createdOn:d.created_on||'',commitHash:d.deployment_trigger?.metadata?.commit_hash||'',stage:d.latest_stage?.name||'',stageStatus:d.latest_stage?.status||''})):[];
+          const deploymentList=Array.isArray(deployments.result)?deployments.result.slice(0,10).map(d=>({id:d.id||'',url:d.url||'',environment:d.environment||'',createdOn:d.created_on||'',commitHash:d.deployment_trigger?.metadata?.commit_hash||'',branch:d.deployment_trigger?.metadata?.branch||'',stage:d.latest_stage?.name||'',stageStatus:d.latest_stage?.status||''})):[];
           const live={
             base:e.PROJECT?`https://${e.PROJECT}.pages.dev`:'',
             home:{http:Number(e.HOME_HTTP||0),leadCapture:text('/tmp/cs-pages/home.html').includes('cs-home-lead-form')},
@@ -106,9 +120,10 @@ jobs:
             assistant:{http:Number(e.ASSISTANT_HTTP||0),expected:text('/tmp/cs-pages/assistant.html').includes('Registrar e pedir retorno')},
             privacy:{http:Number(e.PRIVACY_HTTP||0),expected:text('/tmp/cs-pages/privacy.html').toLowerCase().includes('privacidade')}
           };
+          const deployLog=(()=>{try{return fs.readFileSync('/tmp/cs-pages/deploy.log','utf8').slice(-1500).replace(/Bearer\s+\S+/g,'Bearer [redacted]')}catch{return ''}})();
           const out={checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             credentialsConfigured:e.CONFIGURED==='true',projectsHttp:Number(e.PROJECTS_HTTP||0),projectsApiSuccess:projects.success===true,
-            projectFound:Boolean(e.PROJECT),project:e.PROJECT||'',projects:projectList,projectsErrors:safeErrors(projects),
+            projectFound:Boolean(e.PROJECT),project:e.PROJECT||'',deployExit:Number(e.DEPLOY_EXIT||99),deployLogTail:deployLog,projects:projectList,projectsErrors:safeErrors(projects),
             domainsHttp:Number(e.DOMAINS_HTTP||0),domainsApiSuccess:domains.success===true,domains:domainList,domainsErrors:safeErrors(domains),
             deploymentsHttp:Number(e.DEPLOYMENTS_HTTP||0),deploymentsApiSuccess:deployments.success===true,deployments:deploymentList,deploymentsErrors:safeErrors(deployments),live};
           fs.mkdirSync('docs',{recursive:true});
