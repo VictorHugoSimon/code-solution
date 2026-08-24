@@ -21,10 +21,12 @@
 - Registros MX/TXT do Zoho e verificação do Google permaneceram preservados.
 - `codesolution.com.br` redireciona HTTP 301 para `https://www.codesolution.com.br/`.
 - Home, Serviços, captura de lead, AEO, artigo estático, Diagnóstico, Assistente, Privacidade, Setores e Calculadora passaram no smoke público.
+- Painel, CRM, Marketing e Inteligência fazem parte do bundle de produção e do gate atual de release.
 - D1 `code-solution-crm` ativo no Worker atendente.
 - Worker `code-solution-robo` healthy/ready.
 - Worker `code-solution-atendente` healthy com `storage=d1`.
-- Codi responde HTTP 200 usando Cloudflare Workers AI.
+- O assistente **Code Solution** responde HTTP 200 usando Cloudflare Workers AI.
+- O pipeline atual bloqueia a publicação caso a marca legada do assistente reapareça na superfície pública.
 - Payload de lead inválido é rejeitado com HTTP 400 + `validation_error` antes de gravação.
 - CRM sem credencial retorna HTTP 401.
 - CRM com `CRM_ADMIN_KEY` real do GitHub retorna HTTP 200 e resumo válido.
@@ -34,7 +36,7 @@
 
 - WhatsApp Cloud API: configurar `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` e `OWNER_WHATSAPP` para notificação automática de novos leads.
 - Meta Pixel: depende do Pixel ID oficial da conta Meta; não usar placeholder.
-- Groq pode permanecer como fallback opcional; Codi usa Workers AI como provedor principal.
+- Groq pode permanecer como fallback opcional; o assistente Code Solution usa Workers AI como provedor principal.
 - O projeto Pages legado `codesolution` (`codesolution.pages.dev`) ainda existe na conta pessoal. Pode ser removido futuramente após confirmação de que nenhuma integração antiga depende dele; não é usado como target do domínio oficial.
 
 ## Evidências
@@ -43,6 +45,7 @@
 - `docs/dns-preflight-status.json`
 - `docs/public-smoke-status.json`
 - `docs/deployment-status.json`
+- `docs/pages-deployment-status.json`
 - `docs/runtime-secrets-status.json`
 - `docs/crm-admin-validation.json`
 - `docs/CLOUDFLARE-OWNERSHIP.md`
