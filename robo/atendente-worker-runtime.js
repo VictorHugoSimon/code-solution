@@ -1,7 +1,7 @@
 import baseWorker from './atendente-worker.js';
 
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
-const RUNTIME_BUILD = 'code-solution-workers-ai-2026-08-24.3';
+const RUNTIME_BUILD = 'code-solution-workers-ai-2026-08-24.4';
 
 export default {
   async fetch(request, env, ctx) {
@@ -111,24 +111,22 @@ async function createLeadWithCommercialSla(request, env, ctx) {
 function commercialSla(score) {
   const temperature = score >= 75 ? 'quente' : score >= 45 ? 'morno' : 'frio';
   const nowInfo = saoPauloParts(new Date());
-  let cursor = saoPauloNoon(nowInfo.year, nowInfo.month, nowInfo.day);
-
-  if (isWeekend(cursor)) cursor = nextBusinessDay(cursor);
+  const today = saoPauloNoon(nowInfo.year, nowInfo.month, nowInfo.day);
 
   if (temperature === 'quente') {
-    if (nowInfo.weekday === 'Sat' || nowInfo.weekday === 'Sun' || nowInfo.hour >= 16) {
-      cursor = nextBusinessDay(cursor);
-    }
-    return { temperature, dueDate: saoPauloDate(cursor), label: 'mesmo dia útil', policy: 'hot_same_business_day' };
+    const due = (nowInfo.weekday === 'Sat' || nowInfo.weekday === 'Sun' || nowInfo.hour >= 16)
+      ? nextBusinessDay(today)
+      : today;
+    return { temperature, dueDate: saoPauloDate(due), label: 'mesmo dia útil', policy: 'hot_same_business_day' };
   }
 
   if (temperature === 'morno') {
-    cursor = addBusinessDays(cursor, 1);
-    return { temperature, dueDate: saoPauloDate(cursor), label: '1 dia útil', policy: 'warm_1_business_day' };
+    const due = addBusinessDays(today, 1);
+    return { temperature, dueDate: saoPauloDate(due), label: '1 dia útil', policy: 'warm_1_business_day' };
   }
 
-  cursor = addBusinessDays(cursor, 3);
-  return { temperature, dueDate: saoPauloDate(cursor), label: '3 dias úteis', policy: 'cold_3_business_days' };
+  const due = addBusinessDays(today, 3);
+  return { temperature, dueDate: saoPauloDate(due), label: '3 dias úteis', policy: 'cold_3_business_days' };
 }
 
 function addBusinessDays(date, days) {
@@ -159,7 +157,6 @@ function isWeekend(date) {
 }
 
 function saoPauloNoon(year, month, day) {
-  // 12:00 em São Paulo = 15:00 UTC no calendário atual (UTC-03:00).
   return new Date(Date.UTC(year, month - 1, day, 15, 0, 0));
 }
 
