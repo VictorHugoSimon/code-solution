@@ -81,7 +81,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PROJECT: ${{ steps.project.outputs.name }}
-        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --branch=main
+        run: |
+          set -euo pipefail
+          npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$GITHUB_SHA" --commit-message="GitHub Actions production $GITHUB_SHA"
 
       - name: Ensure custom domains
         id: domains
