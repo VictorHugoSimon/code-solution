@@ -40,7 +40,8 @@ jobs:
           }
 
           api account "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}"
-          api pages "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects?per_page=100"
+          api zone "https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br"
+          api pages "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects"
           api d1 "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database?per_page=100"
           api kv "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces?per_page=100"
           api workers "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts"
@@ -53,18 +54,25 @@ jobs:
           const fs=require('fs');
           const read=(n)=>{try{return JSON.parse(fs.readFileSync(`/tmp/cs-footprint/${n}.json`,'utf8'))}catch{return {}}};
           const http=(n)=>Number((()=>{try{return fs.readFileSync(`/tmp/cs-footprint/${n}.http`,'utf8').trim()}catch{return '0'}})());
-          const account=read('account'),pages=read('pages'),d1=read('d1'),kv=read('kv'),workers=read('workers');
+          const safeErrors=(x)=>Array.isArray(x?.errors)?x.errors.map(v=>({code:v.code,message:String(v.message||'').slice(0,220)})):[];
+          const account=read('account'),zone=read('zone'),pages=read('pages'),d1=read('d1'),kv=read('kv'),workers=read('workers');
           const arr=(x)=>Array.isArray(x?.result)?x.result:[];
           const hasCS=(s)=>/code[- ]?solution|codesolution/i.test(String(s||''));
+          const z=arr(zone).find(x=>x.name==='codesolution.com.br');
           const out={
             checkedAt:new Date().toISOString(),
             sourceCommit:process.env.SOURCE_SHA,
             accountId:process.env.ACCOUNT_ID,
             account:{http:http('account'),success:account.success===true,name:account?.result?.name||''},
-            pages:{http:http('pages'),success:pages.success===true,items:arr(pages).filter(x=>hasCS(x.name)||hasCS(x.subdomain)).map(x=>({name:x.name,subdomain:x.subdomain||'',productionBranch:x.production_branch||''}))},
-            d1:{http:http('d1'),success:d1.success===true,items:arr(d1).filter(x=>hasCS(x.name)).map(x=>({name:x.name,uuid:x.uuid||x.id||''}))},
-            kv:{http:http('kv'),success:kv.success===true,items:arr(kv).filter(x=>hasCS(x.title)||String(x.id||'')==='8308fb9fe843456c84afa724769c00b9').map(x=>({title:x.title||'',id:x.id||''}))},
-            workers:{http:http('workers'),success:workers.success===true,items:arr(workers).filter(x=>hasCS(x.id)||hasCS(x.name)).map(x=>({name:x.id||x.name||''}))}
+            zone:{
+              http:http('zone'),success:zone.success===true,found:Boolean(z),name:z?.name||'',id:z?.id||'',status:z?.status||'',
+              accountId:z?.account?.id||'',accountName:z?.account?.name||'',sameAsDeploymentAccount:Boolean(z?.account?.id&&z.account.id===process.env.ACCOUNT_ID),
+              nameServers:z?.name_servers||[],errors:safeErrors(zone)
+            },
+            pages:{http:http('pages'),success:pages.success===true,errors:safeErrors(pages),items:arr(pages).filter(x=>hasCS(x.name)||hasCS(x.subdomain)).map(x=>({name:x.name,subdomain:x.subdomain||'',productionBranch:x.production_branch||''}))},
+            d1:{http:http('d1'),success:d1.success===true,errors:safeErrors(d1),items:arr(d1).filter(x=>hasCS(x.name)).map(x=>({name:x.name,uuid:x.uuid||x.id||''}))},
+            kv:{http:http('kv'),success:kv.success===true,errors:safeErrors(kv),items:arr(kv).filter(x=>hasCS(x.title)||String(x.id||'')==='8308fb9fe843456c84afa724769c00b9').map(x=>({title:x.title||'',id:x.id||''}))},
+            workers:{http:http('workers'),success:workers.success===true,errors:safeErrors(workers),items:arr(workers).filter(x=>hasCS(x.id)||hasCS(x.name)).map(x=>({name:x.id||x.name||''}))}
           };
           fs.mkdirSync('docs',{recursive:true});
           fs.writeFileSync('docs/cloudflare-footprint.json',JSON.stringify(out,null,2)+'\n');
