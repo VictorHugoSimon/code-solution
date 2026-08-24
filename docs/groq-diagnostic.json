@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-08-24T12:51:45.874Z",
+  "sourceCommit": "db907ae9b8bad111ff53e9a70d4cff09739a41a5",
+  "keyConfigured": false,
+  "models": {
+    "http": 0,
+    "success": false,
+    "llamaAvailable": false,
+    "gptOssAvailable": false,
+    "modelCount": 0,
+    "error": {
+      "message": "",
+      "type": "",
+      "code": ""
+    }
+  },
+  "llama": {
+    "http": 0,
+    "success": false,
+    "error": {
+      "message": "",
+      "type": "",
+      "code": ""
+    }
+  },
+  "gptOss": {
+    "http": 0,
+    "success": false,
+    "error": {
+      "message": "",
+      "type": "",
+      "code": ""
+    }
+  }
+}
