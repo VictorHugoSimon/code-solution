@@ -1,12 +1,12 @@
 {
-  "checkedAt": "2026-08-24T00:38:19.895Z",
-  "sourceCommit": "9ffda4c7c24cdb79ec0075f2ef51a32c4a07924f",
+  "checkedAt": "2026-08-24T00:41:39.485Z",
+  "sourceCommit": "994de61f1cb0f2918c086771f4ac6f06d11830d0",
   "cloudflareSecretsConfigured": "true",
   "crmD1Provision": "success",
   "crmD1DatabaseId": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d",
   "contentWorkerDeploy": "success",
   "attendantWorkerDeploy": "success",
-  "publicHealthChatAndLeadSmokeTest": "failure",
+  "publicHealthChatAndLeadSmokeTest": "success",
   "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev",
   "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev"
 }
