@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-08-24T18:06:40.669Z",
+  "sourceCommit": "bf827312d2518ef0317d7513a0cd5d056be794a2",
+  "target": "codesolution-site.pages.dev",
+  "before": [
+    {
+      "type": "CNAME",
+      "name": "codesolution.com.br",
+      "content": "codesolution.pages.dev",
+      "proxied": true
+    },
+    {
+      "type": "CNAME",
+      "name": "www.codesolution.com.br",
+      "content": "codesolution.pages.dev",
+      "proxied": true
+    }
+  ],
+  "after": [
+    {
+      "type": "CNAME",
+      "name": "codesolution.com.br",
+      "content": "codesolution-site.pages.dev",
+      "proxied": true
+    },
+    {
+      "type": "CNAME",
+      "name": "www.codesolution.com.br",
+      "content": "codesolution-site.pages.dev",
+      "proxied": true
+    }
+  ],
+  "dnsSuccess": true,
+  "pagesHttp": 200,
+  "pagesDomains": [
+    {
+      "name": "codesolution.com.br",
+      "status": "pending",
+      "verificationStatus": "pending",
+      "verificationError": "CNAME record not set"
+    },
+    {
+      "name": "www.codesolution.com.br",
+      "status": "pending",
+      "verificationStatus": "pending",
+      "verificationError": "CNAME record not set"
+    }
+  ]
+}
