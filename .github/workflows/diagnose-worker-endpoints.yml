@@ -1,5 +1,6 @@
 name: Diagnose Worker endpoints
 
+# Re-run marker: after Codi model update 2026-08-23
 on:
   push:
     branches: [main]
