@@ -25,6 +25,7 @@ A operação está publicada na conta Cloudflare pessoal `Victorhugoteixeirasimo
 - CRM Kanban com 12 etapas, Lead Score, timeline, responsável, próxima ação, vencimento, valor, previsão e motivo de perda;
 - **Atendimento Guiado** com roteiro para entender negócio, dor, qualificar, direcionar solução e registrar próxima ação;
 - **Prospecção Orgânica** com fila diária de LinkedIn/prospecção ativa, prioridades, follow-ups, mensagens e gerador de links UTM;
+- **Relatórios Comerciais** por período com win rate, pipeline, valor ganho, origem, responsável, perdas, fila crítica, exportação CSV e impressão/PDF;
 - cadastro manual de leads para indicação, LinkedIn, WhatsApp, telefone, e-mail, evento e prospecção ativa;
 - filtros do CRM por temperatura, origem e responsável;
 - Painel de Marketing com leads, UTMs, campanhas, score, conversão, funil e pipeline por origem;
@@ -60,6 +61,7 @@ A operação está publicada na conta Cloudflare pessoal `Victorhugoteixeirasimo
 - Prospecção Orgânica: `https://www.codesolution.com.br/painel/prospeccao/`
 - Marketing: `https://www.codesolution.com.br/painel/marketing/`
 - Inteligência: `https://www.codesolution.com.br/painel/inteligencia/`
+- Relatórios Comerciais: `https://www.codesolution.com.br/painel/relatorios/`
 
 ### Runtime
 - Content Worker: `https://code-solution-robo.victorhugoteixeirasimon6.workers.dev`
@@ -88,7 +90,8 @@ A operação está publicada na conta Cloudflare pessoal `Victorhugoteixeirasimo
 7. **Prospecção Orgânica** organiza novas oportunidades e follow-ups e gera links UTM.
 8. Marketing mede origem, UTMs, campanhas e conversão sem inventar CAC/ROAS.
 9. Inteligência organiza prioridades, forecast, gargalos, segmentos e motivos de perda.
-10. Ganho/perda fecha o ciclo e alimenta os indicadores executivos.
+10. **Relatórios Comerciais** consolidam o período e permitem exportar a base operacional em CSV ou imprimir o one-page comercial.
+11. Ganho/perda fecha o ciclo e alimenta os indicadores executivos.
 
 ## Direcionamento de solução
 
@@ -111,6 +114,20 @@ Cadência diária recomendada disponível no painel:
 - 1 conteúdo de autoridade.
 
 O módulo `/painel/prospeccao/` também gera URLs com UTM para medir o que efetivamente gera leads e pipeline.
+
+## Relatórios e governança
+
+O módulo `/painel/relatorios/` permite:
+
+- períodos de 7, 30, 90 dias ou histórico completo;
+- leads, quentes, win rate, pipeline, valor ganho e follow-ups atrasados;
+- funil por estágio;
+- performance por origem;
+- performance por responsável;
+- motivos de perda;
+- fila crítica;
+- exportação CSV em UTF-8;
+- impressão/geração de PDF pelo navegador.
 
 ## Segurança e ownership
 
@@ -146,7 +163,7 @@ O assistente usa Cloudflare Workers AI como provedor principal.
 - aplicação obrigatória da marca **Code Solution**;
 - bloqueio do nome público legado do assistente;
 - normalização da navegação do painel;
-- validação obrigatória de Painel, CRM, Atendimento, Prospecção, Marketing e Inteligência;
+- validação obrigatória de Painel, CRM, Atendimento, Prospecção, Marketing, Inteligência e Relatórios;
 - sincronização de `CRM_ADMIN_KEY` no Pages;
 - deploy automático para Cloudflare Pages;
 - deploy automático dos Workers;
