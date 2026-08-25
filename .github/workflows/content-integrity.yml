@@ -63,6 +63,7 @@ jobs:
           test -f deploy/painel/inteligencia/index.html
           test -f deploy/painel/growth/index.html
           test -f deploy/painel/usuarios/index.html
+          test -f deploy/painel/conta/index.html
           test -f deploy/_worker.js
           node --check deploy/_worker.js
           npm run check:bundled-surfaces
@@ -75,6 +76,8 @@ jobs:
           grep -qi 'Code Solution' deploy/assistente/index.html
           grep -qi 'Acesso ao CRM' deploy/_worker.js
           grep -qi 'cs_panel_session' deploy/_worker.js
+          grep -q "pathname.startsWith('/painel/conta')" deploy/_worker.js
+          grep -q 'filterPanelNavigation' deploy/_worker.js
           grep -qi 'Visão executiva' deploy/painel/index.html
           grep -qi 'Marketing & Aquisição' deploy/painel/marketing/index.html
           grep -qi 'Inteligência Comercial' deploy/painel/inteligencia/index.html
@@ -83,7 +86,8 @@ jobs:
           grep -qi 'Novo lead' deploy/painel/crm/index.html
           grep -qi 'Todas origens' deploy/painel/crm/index.html
           grep -qi 'Minha segurança' deploy/painel/usuarios/index.html
-          grep -qi 'Trocar minha senha' deploy/painel/usuarios/index.html
+          grep -qi 'Minha Conta' deploy/painel/conta/index.html
+          grep -qi 'Trocar minha senha' deploy/painel/conta/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy assistant branding found in public assistant'; exit 1; fi
           grep -qi 'Privacidade' deploy/privacidade/index.html
 
@@ -96,5 +100,5 @@ jobs:
             echo '- Source: `${{ github.sha }}`'
             echo '- Release owner: `deploy-pages.yml`'
             echo '- This workflow is read-only and never commits generated files.'
-            echo '- Workers, CRM schema, Pages bundle, navigation and public branding validated in this run.'
+            echo '- Personal account, role-aware navigation, Workers, CRM schema, Pages bundle and public branding validated in this run.'
           } >> "$GITHUB_STEP_SUMMARY"
