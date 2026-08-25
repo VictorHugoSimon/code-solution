@@ -1,6 +1,7 @@
 import attendantRuntime from './atendente-worker-runtime.js';
 import { handleGrowthApi } from './growth-api.js';
 import { handleCommercialApi, afterLeadCreated, beforeLeadPatch, afterLeadPatched, runCommercialAutomation } from './crm-automation.js';
+import { handleAcquisitionInsights } from './acquisition-insights.js';
 
 const EVENT_NAMES = new Set([
   'organic_landing_view',
@@ -25,13 +26,18 @@ export default {
     const url = new URL(request.url);
     const cors = corsHeaders(request, env);
 
+    if (url.pathname.startsWith('/crm/acquisition/')) {
+      const response = await handleAcquisitionInsights(request, env, cors);
+      if (response) return response;
+    }
+
     if (url.pathname.startsWith('/crm/growth')) {
       return handleGrowthApi(request, env, cors);
     }
 
     if (
       url.pathname.startsWith('/crm/operations') ||
-      url.pathname.startsWith('/crm/acquisition') ||
+      url.pathname === '/crm/acquisition/summary' ||
       url.pathname === '/crm/alerts' ||
       /^\/crm\/alert\/[^/]+$/.test(url.pathname) ||
       url.pathname === '/crm/tasks' ||
