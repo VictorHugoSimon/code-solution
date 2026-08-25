@@ -1,0 +1,58 @@
+name: Validate production admin identity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-admin-identity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate admin identity in production D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+          npx wrangler@4 d1 execute code-solution-crm --remote --command "SELECT username,display_name,role,active,password_hash,password_salt,password_iterations FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json >/tmp/admin.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/admin.json','utf8'));
+          const rows=Array.isArray(x)?(x[0]?.results||[]):(x.result?.[0]?.results||x.results||[]);
+          const u=rows[0]||{};
+          const expected={
+            username:'admin',role:'admin',active:1,
+            hash:'29339efeb77edb2f93fe6dd467c98ce766c327aa5993048bbfe5324db3fcfe5e',
+            salt:'9f79ab6a5b532ff1c205b89e27b00fe690f51f86aca8f04c',iterations:180000
+          };
+          const out={checkedAt:new Date().toISOString(),found:Boolean(u.username),username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Number(u.active||0)===1,passwordMaterialMatchesExpected:Boolean(u.password_hash===expected.hash&&u.password_salt===expected.salt&&Number(u.password_iterations)===expected.iterations),ready:Boolean(u.username==='admin'&&u.role==='admin'&&Number(u.active)===1&&u.password_hash===expected.hash&&u.password_salt===expected.salt&&Number(u.password_iterations)===expected.iterations)};
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('/tmp/admin-identity-status.json',JSON.stringify(out,null,2)+'\n');
+          console.log(JSON.stringify(out,null,2));
+          if(!out.ready) process.exit(1);
+          NODE
+      - name: Persist status
+        if: always()
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          if [ -f /tmp/admin-identity-status.json ]; then cp /tmp/admin-identity-status.json docs/admin-identity-status.json; else echo '{"ready":false}' > docs/admin-identity-status.json; fi
+          git config user.name 'Code Solution CI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/admin-identity-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record admin identity validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
