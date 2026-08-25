@@ -1,0 +1,101 @@
+name: Recover CRM access
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-crm-access.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: recover-crm-access
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate required production files
+        run: |
+          set -euo pipefail
+          test -f deploy/_worker.js
+          test -f deploy/painel/crm/index.html
+          node --check deploy/_worker.js
+          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
+          grep -q 'Acesso ao CRM' deploy/_worker.js
+
+      - name: Sync CRM secret to Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+
+      - name: Deploy Pages production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="Recover CRM access $GITHUB_SHA"
+
+      - name: Validate live CRM access
+        id: live
+        run: |
+          set -euo pipefail
+          sleep 12
+          login_http=$(curl -sS --retry 8 --retry-delay 4 -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          grep -qi 'Acesso ao CRM' /tmp/login.html
+          grep -qi 'Usuário' /tmp/login.html
+          grep -qi 'Senha' /tmp/login.html
+          headers=$(mktemp)
+          curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          panel_http=$(head -n1 "$headers" | awk '{print $2}')
+          panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$login_http" = 200
+          test "$panel_http" = 302
+          echo "$panel_location" | grep -q '/painel/login/'
+          echo "login_http=$login_http" >> "$GITHUB_OUTPUT"
+          echo "panel_http=$panel_http" >> "$GITHUB_OUTPUT"
+          echo "panel_location=$panel_location" >> "$GITHUB_OUTPUT"
+
+      - name: Persist recovery status
+        if: always()
+        env:
+          LOGIN_HTTP: ${{ steps.live.outputs.login_http }}
+          PANEL_HTTP: ${{ steps.live.outputs.panel_http }}
+          PANEL_LOCATION: ${{ steps.live.outputs.panel_location }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/crm-access-recovery.json', JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            loginHttp:Number(e.LOGIN_HTTP||0),panelHttp:Number(e.PANEL_HTTP||0),
+            panelLocation:e.PANEL_LOCATION||'',loginUrl:'https://www.codesolution.com.br/painel/login/',
+            username:'admin',status:(e.LOGIN_HTTP==='200'&&e.PANEL_HTTP==='302')?'success':'failure'
+          },null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Recovery Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/crm-access-recovery.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record CRM access recovery"
+          git pull --rebase origin main
+          git push origin HEAD:main
