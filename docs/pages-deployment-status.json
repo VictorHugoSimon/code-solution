@@ -1,39 +1,15 @@
 {
-  "checkedAt": "2026-08-25T01:21:47Z",
-  "sourceCommit": "f7f3ee09d8f75279a360cbc5d34c52d2f81b2f32",
+  "checkedAt": "2026-08-25T09:36:40.695Z",
+  "sourceCommit": "2eb7bc969fa6030831e9667f5a76a2d06c7d32ec",
   "build": "success",
   "personalCloudflareCredentials": "success",
-  "cloudflareAccountId": "cad25fe6c91871bbafb58236cf9b9b81",
   "crmAdminSecretSync": "success",
   "pagesDeploy": "success",
-  "deploymentUrl": "https://eb779906.codesolution-site.pages.dev",
-  "project": "codesolution-site",
   "publicSmokeTest": "success",
-  "crmLogin": {
-    "url": "https://www.codesolution.com.br/painel/login/",
-    "http": 200,
-    "usernameField": true,
-    "passwordField": true,
-    "credentialHashVerified": true,
-    "sessionTtlHours": 8
-  },
-  "crmProtection": {
-    "unauthenticatedPanelHttp": 302,
-    "unauthenticatedPanelRedirectsToLogin": true,
-    "unauthenticatedApiHttp": 401,
-    "authenticatedBackendHttp": 200
-  },
-  "branding": {
-    "publicName": "Code Solution",
-    "legacyCodiPublic": false
-  },
-  "canonicalRedirect": {
-    "apexHttp": 301,
-    "target": "https://www.codesolution.com.br/"
-  },
-  "deploymentMode": "owner-only-recovery-validated",
-  "evidence": {
-    "workflowRunId": 32797184089,
-    "deployJobId": 97650824520
-  }
+  "crmBackendSmoke": "success",
+  "project": "codesolution-site",
+  "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
+  "prospectingUrl": "https://www.codesolution.com.br/painel/prospeccao/",
+  "branding": "Code Solution",
+  "deploymentMode": "single-production-pipeline"
 }
