@@ -3,10 +3,10 @@ import fs from 'node:fs/promises';
 const panels = [
   'deploy/painel/index.html','deploy/painel/crm/index.html','deploy/painel/atendimento/index.html','deploy/painel/agenda/index.html',
   'deploy/painel/prospeccao/index.html','deploy/painel/marketing/index.html','deploy/painel/inteligencia/index.html','deploy/painel/growth/index.html',
-  'deploy/painel/relatorios/index.html','deploy/painel/usuarios/index.html',
+  'deploy/painel/relatorios/index.html','deploy/painel/usuarios/index.html','deploy/painel/conta/index.html',
 ];
 
-const hrefs = ['/painel/','/painel/crm/','/painel/atendimento/','/painel/agenda/','/painel/prospeccao/','/painel/marketing/','/painel/inteligencia/','/painel/growth/','/painel/relatorios/','/painel/usuarios/','/painel/logout/'];
+const hrefs = ['/painel/','/painel/crm/','/painel/atendimento/','/painel/agenda/','/painel/prospeccao/','/painel/marketing/','/painel/inteligencia/','/painel/growth/','/painel/relatorios/','/painel/usuarios/','/painel/conta/','/painel/logout/'];
 const failures = [];
 
 for (const file of panels) {
@@ -31,6 +31,8 @@ const attendance = await fs.readFile('deploy/painel/atendimento/index.html', 'ut
 if (!attendance.includes('CS-PANEL-DEEPLINK')) failures.push('attendance: requested lead deep-link handler missing');
 const users = await fs.readFile('deploy/painel/usuarios/index.html','utf8');
 for(const contract of ['/api/auth','Resetar senha','Revogar sessões','Auditoria recente']) if(!users.includes(contract)) failures.push(`users: missing ${contract}`);
+const account = await fs.readFile('deploy/painel/conta/index.html','utf8');
+for(const contract of ['/api/auth','Minha Conta','Trocar minha senha','activeSessions','failedLogins']) if(!account.includes(contract)) failures.push(`account: missing ${contract}`);
 
 if (failures.length) { console.error('Panel navigation validation failed:'); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
-console.log('Panel navigation OK: all modules including Users, role governance UI, and lead deep-links validated.');
+console.log('Panel navigation OK: all modules including My Account, Users, role governance UI, and lead deep-links validated.');
