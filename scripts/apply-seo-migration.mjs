@@ -26,9 +26,9 @@ function legacyRedirectFor(pathname) {
 }
 ${END}`;
 
-const anchor="const LOGIN_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';";
-if(!source.includes(anchor)) throw new Error('CRM login anchor not found in deploy/_worker.js');
-source=source.replace(anchor,`${anchor}\n${constants}`);
+const exportAnchor='export default {';
+if(!source.includes(exportAnchor)) throw new Error('Pages Worker export anchor not found');
+source=source.replace(exportAnchor,`${constants}\n\n${exportAnchor}`);
 
 const canonical=`    if (url.hostname === 'codesolution.com.br') {
       url.hostname = CANONICAL_HOST;
@@ -44,6 +44,6 @@ const route=`${canonical}
 source=source.replace(canonical,route);
 
 await fs.writeFile(path,source,'utf8');
-console.log('Permanent legacy SEO redirects applied to Pages Worker.');
+console.log('Permanent legacy SEO redirects applied to Pages Worker without auth coupling.');
 
 function escapeRe(value){return value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
