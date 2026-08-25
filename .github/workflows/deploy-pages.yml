@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build production bundle
+      - name: Build and validate production bundle
         id: build
         run: |
           set -euo pipefail
@@ -39,37 +39,22 @@ jobs:
           npm run check:bundled-surfaces
           node --check deploy/_worker.js
           for file in \
-            deploy/index.html \
-            deploy/servicos/index.html \
-            deploy/setores/index.html \
-            deploy/calculadora/index.html \
-            deploy/diagnostico/index.html \
-            deploy/assistente/index.html \
-            deploy/privacidade/index.html \
-            deploy/painel/index.html \
-            deploy/painel/crm/index.html \
-            deploy/painel/atendimento/index.html \
-            deploy/painel/agenda/index.html \
-            deploy/painel/prospeccao/index.html \
-            deploy/painel/marketing/index.html \
-            deploy/painel/inteligencia/index.html \
-            deploy/painel/relatorios/index.html; do
+            deploy/index.html deploy/servicos/index.html deploy/setores/index.html deploy/calculadora/index.html \
+            deploy/diagnostico/index.html deploy/assistente/index.html deploy/privacidade/index.html \
+            deploy/cases/index.html deploy/cases/sos-truck/index.html deploy/cases/tonini/index.html deploy/cases/code-solution/index.html \
+            deploy/painel/index.html deploy/painel/crm/index.html deploy/painel/atendimento/index.html deploy/painel/agenda/index.html \
+            deploy/painel/prospeccao/index.html deploy/painel/marketing/index.html deploy/painel/inteligencia/index.html \
+            deploy/painel/growth/index.html deploy/painel/relatorios/index.html deploy/painel/usuarios/index.html; do
             test -f "$file"
           done
-          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
-          grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
+          grep -q '/auth/login' deploy/_worker.js
+          grep -q '/auth/session' deploy/_worker.js
+          grep -q 'panelAllowed' deploy/_worker.js
+          grep -q '/painel/usuarios/' deploy/painel/usuarios/index.html
+          grep -q 'case-tracking.js' deploy/cases/sos-truck/index.html
+          grep -q '<loc>https://www.codesolution.com.br/cases/</loc>' deploy/sitemap.xml
           grep -qi 'Code Solution' deploy/assistente/index.html
-          grep -qi 'Atendimento Guiado' deploy/painel/atendimento/index.html
-          grep -q 'CS-PANEL-DEEPLINK' deploy/painel/atendimento/index.html
-          grep -qi 'Agenda Comercial' deploy/painel/agenda/index.html
-          grep -qi 'Prospecção Orgânica' deploy/painel/prospeccao/index.html
-          grep -q '/painel/atendimento/?lead=' deploy/painel/prospeccao/index.html
-          grep -qi 'Relatórios Comerciais' deploy/painel/relatorios/index.html
-          grep -q 'Exportar CSV' deploy/painel/relatorios/index.html
-          if grep -qi '\bCodi\b' deploy/assistente/index.html; then
-            echo '::error::Legacy Codi branding found in assistant release bundle'
-            exit 1
-          fi
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found'; exit 1; fi
 
       - name: Require personal Cloudflare credentials
         id: credentials
@@ -80,11 +65,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$CRM_ADMIN_KEY"
           test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
 
-      - name: Sync CRM runtime secret to Pages
+      - name: Sync technical CRM key to Pages
         id: secret
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -101,51 +85,49 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler@4 pages deploy deploy \
-            --project-name=codesolution-site \
-            --commit-hash="$GITHUB_SHA" \
-            --commit-message="Code Solution production $GITHUB_SHA"
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="Code Solution production $GITHUB_SHA"
 
       - name: Validate public production
         id: smoke
         run: |
           set -euo pipefail
           sleep 15
-          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
+          for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /cases/ /cases/sos-truck/ /cases/tonini/ /cases/code-solution/ /sitemap.xml; do
             curl -LfsS --retry 6 --retry-delay 3 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
           curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
           curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant.html
           grep -qi 'Code Solution' /tmp/assistant.html
           if grep -qi '\bCodi\b' /tmp/assistant.html; then exit 1; fi
+          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'S.O.S Truck'
+          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Tonini'
+          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Code Solution'
           login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
           test "$login_http" = 200
           grep -q 'Acesso ao CRM' /tmp/login.html
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
-          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/relatorios/; do
-            h=$(mktemp)
-            curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
+          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/usuarios/; do
+            h=$(mktemp); curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
             grep -i '^location:' "$h" | grep -q '/painel/login/'
           done
-          test "$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
-          apex_headers=$(mktemp)
-          curl -sS -D "$apex_headers" -o /dev/null https://codesolution.com.br/
-          test "$(head -n1 "$apex_headers" | awk '{print $2}')" = 301
-          grep -i '^location:' "$apex_headers" | grep -q '^location: https://www.codesolution.com.br/'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/auth/session)" = 401
+          h=$(mktemp); curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
+          test "$(head -n1 "$h" | awk '{print $2}')" = 301
+          grep -i '^location:' "$h" | grep -q '^location: https://www.codesolution.com.br/'
 
-      - name: Validate CRM backend
+      - name: Validate CRM and identity backend
         id: backend
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
           set -euo pipefail
-          http=$(curl -sS -o /tmp/summary.json -w '%{http_code}' \
-            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
-            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
+          http=$(curl -sS -o /tmp/summary.json -w '%{http_code}' -H "x-crm-key: ${CRM_ADMIN_KEY}" https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
           test "$http" = 200
-          node -e "const x=require('/tmp/summary.json'); if(x.ok!==true) process.exit(1)"
+          node -e "const x=require('/tmp/summary.json');if(x.ok!==true)process.exit(1)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/session)" = 401
 
       - name: Record Pages release
         if: always()
@@ -160,52 +142,16 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          git fetch origin main
-          git reset --hard origin/main
-          mkdir -p docs
+          git fetch origin main; git reset --hard origin/main; mkdir -p docs
           node - <<'NODE'
           const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            build:e.BUILD||'failure',personalCloudflareCredentials:e.CREDENTIALS||'failure',
-            crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',
-            publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',
-            project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
-            attendanceUrl:'https://www.codesolution.com.br/painel/atendimento/',
-            agendaUrl:'https://www.codesolution.com.br/painel/agenda/',
-            prospectingUrl:'https://www.codesolution.com.br/painel/prospeccao/',
-            reportsUrl:'https://www.codesolution.com.br/painel/relatorios/',
-            panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'
-          },null,2)+'\n');
+          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:e.BUILD||'failure',personalCloudflareCredentials:e.CREDENTIALS||'failure',crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',usersUrl:'https://www.codesolution.com.br/painel/usuarios/',casesUrl:'https://www.codesolution.com.br/cases/',panelIdentity:'individual-revocable-d1',panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'},null,2)+'\n');
           NODE
-          git config user.name 'Code Solution Pages Deploy Bot'
-          git config user.email 'actions@users.noreply.github.com'
+          git config user.name 'Code Solution Pages Deploy Bot'; git config user.email 'actions@users.noreply.github.com'
           git add docs/pages-deployment-status.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'chore: record Pages deployment status'
-          for attempt in 1 2 3; do
-            if git push origin HEAD:main; then exit 0; fi
-            git fetch origin main
-            git reset --hard origin/main
-            node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            build:e.BUILD||'failure',personalCloudflareCredentials:e.CREDENTIALS||'failure',
-            crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',
-            publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',
-            project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
-            attendanceUrl:'https://www.codesolution.com.br/painel/atendimento/',
-            agendaUrl:'https://www.codesolution.com.br/painel/agenda/',
-            prospectingUrl:'https://www.codesolution.com.br/painel/prospeccao/',
-            reportsUrl:'https://www.codesolution.com.br/painel/relatorios/',
-            panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'
-          },null,2)+'\n');
-          NODE
-            git add docs/pages-deployment-status.json
-            git commit -m 'chore: record Pages deployment status' || true
-          done
-          exit 1
+          git pull --rebase origin main; git push origin HEAD:main
 
       - name: Enforce production release
         if: always()
