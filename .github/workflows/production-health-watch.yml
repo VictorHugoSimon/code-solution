@@ -1,0 +1,105 @@
+name: Code Solution production health watch
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-health-watch.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-health-watch
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check production surfaces
+        id: check
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set +e
+          : > /tmp/failures.txt
+          check_200(){ code=$(curl -sS -L --max-time 25 --retry 2 -o /dev/null -w '%{http_code}' "$2"); [ "$code" = 200 ] || echo "$1 expected 200 got $code" >> /tmp/failures.txt; }
+          check_200 "home" "https://www.codesolution.com.br/"
+          check_200 "services" "https://www.codesolution.com.br/servicos/"
+          check_200 "assistant" "https://www.codesolution.com.br/assistente/"
+          check_200 "crm login" "https://www.codesolution.com.br/painel/login/"
+          check_200 "content worker" "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health"
+          check_200 "attendant worker" "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health"
+
+          h=$(mktemp)
+          curl -sS --max-time 25 -D "$h" -o /dev/null https://codesolution.com.br/ || true
+          apex_http=$(head -n1 "$h" | awk '{print $2}')
+          apex_location=$(grep -i '^location:' "$h" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          if [ "$apex_http" != 301 ] || ! echo "$apex_location" | grep -q '^https://www.codesolution.com.br/'; then
+            echo "apex redirect expected 301 to www; got $apex_http $apex_location" >> /tmp/failures.txt
+          fi
+
+          if [ -z "$CRM_ADMIN_KEY" ]; then
+            echo "CRM_ADMIN_KEY missing from repository secrets" >> /tmp/failures.txt
+          else
+            ops_http=$(curl -sS --max-time 30 -o /tmp/ops.json -w '%{http_code}' \
+              https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/operations/summary \
+              -H "x-crm-key: $CRM_ADMIN_KEY")
+            if [ "$ops_http" != 200 ]; then
+              echo "CRM operations expected 200 got $ops_http" >> /tmp/failures.txt
+            else
+              node -e "const x=require('/tmp/ops.json'); if(x.ok!==true) process.exit(1)" || echo "CRM operations returned invalid payload" >> /tmp/failures.txt
+            fi
+          fi
+
+          if [ -s /tmp/failures.txt ]; then
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo '### Production health: FAILED' >> "$GITHUB_STEP_SUMMARY"
+            sed 's/^/- /' /tmp/failures.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+            echo '### Production health: OK' >> "$GITHUB_STEP_SUMMARY"
+            echo '- Site, canonical redirect, Workers, login and CRM automation are responding.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open or update incident issue
+        if: steps.check.outputs.healthy != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='ALERTA PRODUÇÃO: Code Solution health check'
+          issue=$(gh issue list --state open --search "in:title $title" --json number --jq '.[0].number // empty')
+          details=$(sed 's/^/- /' /tmp/failures.txt)
+          if [ -z "$issue" ]; then
+            gh issue create --title "$title" --body "Falha detectada automaticamente em $(date -u +'%Y-%m-%dT%H:%M:%SZ').\n\n${details}\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue comment "$issue" --body "Nova falha em $(date -u +'%Y-%m-%dT%H:%M:%SZ').\n\n${details}\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          fi
+
+      - name: Close recovered incident
+        if: steps.check.outputs.healthy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='ALERTA PRODUÇÃO: Code Solution health check'
+          issue=$(gh issue list --state open --search "in:title $title" --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Produção recuperada e validada automaticamente em $(date -u +'%Y-%m-%dT%H:%M:%SZ')."
+            gh issue close "$issue" --reason completed
+          fi
+
+      - name: Enforce health
+        if: always()
+        env:
+          HEALTHY: ${{ steps.check.outputs.healthy }}
+        run: test "$HEALTHY" = true
