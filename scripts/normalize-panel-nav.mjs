@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 const files = [
   'deploy/painel/index.html',
   'deploy/painel/crm/index.html',
+  'deploy/painel/crm/autonomia/index.html',
   'deploy/painel/marketing/index.html',
   'deploy/painel/inteligencia/index.html',
   'deploy/painel/growth/index.html',
@@ -17,6 +18,7 @@ const files = [
 const links = [
   ['/painel/', 'Visão', 'visao'],
   ['/painel/crm/', 'CRM', 'crm'],
+  ['/painel/crm/autonomia/', 'Autonomia', 'autonomia'],
   ['/painel/atendimento/', 'Atendimento', 'atendimento'],
   ['/painel/agenda/', 'Agenda', 'agenda'],
   ['/painel/prospeccao/', 'Prospecção', 'prospeccao'],
@@ -30,6 +32,7 @@ const links = [
 
 function currentModule(file) {
   if (file.endsWith('/painel/index.html')) return 'visao';
+  if (file.includes('/crm/autonomia/')) return 'autonomia';
   if (file.includes('/crm/')) return 'crm';
   if (file.includes('/atendimento/')) return 'atendimento';
   if (file.includes('/agenda/')) return 'agenda';
