@@ -1,0 +1,48 @@
+name: Normalize public Code Solution branding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-public-brand.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-public-brand-fix
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Normalize legacy public assistant branding
+        run: node scripts/rebrand-code-solution.mjs
+      - name: Confirm no public Codi branding remains
+        run: |
+          if grep -RniE '\bCodi\b' deploy --include='*.html' --include='*.htm' --include='*.js' --include='*.json' --include='*.xml' --include='*.txt'; then
+            echo 'Legacy public branding still exists.' >&2
+            exit 1
+          fi
+      - name: Commit normalized public bundle
+        run: |
+          set -euo pipefail
+          git config user.name 'Code Solution Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add deploy
+          if git diff --cached --quiet; then
+            echo 'Public bundle already normalized.'
+            exit 0
+          fi
+          git commit -m 'fix: normalize public Code Solution branding'
+          git pull --rebase origin main
+          git push origin HEAD:main
