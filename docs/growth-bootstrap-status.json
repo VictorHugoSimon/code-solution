@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-08-25T00:46:29.451Z",
+  "sourceCommit": "f473a15f589f33bf82c5725856c73a0e16cb9213",
+  "planning": "failure",
+  "radar": "failure",
+  "social": "failure",
+  "metrics": "failure",
+  "status": "success",
+  "growth": {
+    "ok": true,
+    "prospects": 0,
+    "highIntent": 0,
+    "contentReady": 0,
+    "topicsOpen": 0,
+    "recentRuns": [],
+    "build": "growth-orchestrator-2026-08-24.1",
+    "schedules": {
+      "daily": "0 11 * * 1-5",
+      "blog": "0 12 * * 2,5",
+      "weeklyPlan": "0 13 * * 1",
+      "metrics": "0 20 * * 5"
+    }
+  }
+}
