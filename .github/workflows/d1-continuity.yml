@@ -1,0 +1,140 @@
+name: D1 continuity and restore test
+
+on:
+  schedule:
+    - cron: '37 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/d1-continuity.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: d1-continuity
+  cancel-in-progress: false
+
+env:
+  EXPECTED_ACCOUNT_ID: cad25fe6c91871bbafb58236cf9b9b81
+  PROD_DB: code-solution-crm
+  PROD_DB_ID: 5f2a71bc-e3bf-4063-b52d-48ad11132e1d
+
+jobs:
+  continuity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require personal Cloudflare account
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_ACCOUNT_ID"
+
+      - name: Validate Time Travel bookmark
+        id: bookmark
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          http=$(curl -sS --max-time 30 -o /tmp/bookmark.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/${EXPECTED_ACCOUNT_ID}/d1/database/${PROD_DB_ID}/time_travel/bookmark")
+          test "$http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/bookmark.json');
+          if(x.success!==true || !x.result?.bookmark) throw new Error('D1 Time Travel bookmark unavailable');
+          NODE
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Export production database to ephemeral runner
+        id: export
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          npx wrangler@4 d1 export "$PROD_DB" --remote --output=/tmp/code-solution-crm.sql --y
+          test -s /tmp/code-solution-crm.sql
+          grep -q 'CREATE TABLE' /tmp/code-solution-crm.sql
+          echo "success=true" >> "$GITHUB_OUTPUT"
+
+      - name: Restore export into temporary D1 database
+        id: restore
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          TMP_DB="code-solution-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "$TMP_DB" > /tmp/tmp-db-name
+          npx wrangler@4 d1 create "$TMP_DB" >/tmp/create-db.log
+          npx wrangler@4 d1 execute "$TMP_DB" --remote --file=/tmp/code-solution-crm.sql --yes >/tmp/restore.log
+          npx wrangler@4 d1 execute "$TMP_DB" --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events') ORDER BY name;" --json >/tmp/restore-schema.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync('/tmp/restore-schema.json','utf8');
+          for(const name of ['leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events']) if(!text.includes(name)) throw new Error('restore missing '+name);
+          NODE
+          echo "success=true" >> "$GITHUB_OUTPUT"
+
+      - name: Delete temporary D1 database and sensitive export
+        if: always()
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set +e
+          if [ -s /tmp/tmp-db-name ]; then
+            TMP_DB=$(cat /tmp/tmp-db-name)
+            npx wrangler@4 d1 delete "$TMP_DB" --yes >/dev/null 2>&1 || true
+          fi
+          rm -f /tmp/code-solution-crm.sql /tmp/bookmark.json /tmp/restore.log /tmp/restore-schema.json /tmp/create-db.log
+
+      - name: Persist non-sensitive continuity evidence
+        if: always() && github.event_name != 'schedule'
+        env:
+          BOOKMARK: ${{ steps.bookmark.outcome }}
+          EXPORT: ${{ steps.export.outcome }}
+          RESTORE: ${{ steps.restore.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/d1-continuity-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            database:'code-solution-crm',accountId:'cad25fe6c91871bbafb58236cf9b9b81',
+            timeTravelBookmark:e.BOOKMARK||'failure',ephemeralExport:e.EXPORT||'failure',temporaryRestoreTest:e.RESTORE||'failure',
+            sensitiveBackupCommitted:false,restoreTarget:'temporary D1 deleted after test'
+          },null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Continuity Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/d1-continuity-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record D1 continuity validation"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Open continuity incident on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          title='ALERTA CONTINUIDADE: Code Solution D1'
+          issue=$(gh issue list --state open --search "in:title $title" --json number --jq '.[0].number // empty')
+          body="A validação automática de Time Travel/export/restore temporário falhou. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -z "$issue" ]; then gh issue create --title "$title" --body "$body"; else gh issue comment "$issue" --body "$body"; fi
