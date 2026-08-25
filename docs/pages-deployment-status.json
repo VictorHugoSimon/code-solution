@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-25T15:03:02.084Z",
-  "sourceCommit": "64c57ebfd7923f686184966a60e956d38ae46a92",
+  "checkedAt": "2026-08-25T15:04:37.846Z",
+  "sourceCommit": "4af13e7e65afea8173ea2fe3e617dbc295776dd3",
   "build": "failure",
   "personalCloudflareCredentials": "skipped",
   "crmAdminSecretSync": "skipped",
