@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-08-25T14:44:13.848Z",
+  "sourceCommit": "e09fe557f85926802d57c8359db569d6335bcfcf",
+  "database": "code-solution-crm",
+  "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
+  "timeTravelBookmark": "success",
+  "ephemeralExport": "success",
+  "temporaryRestoreTest": "success",
+  "sensitiveBackupCommitted": false,
+  "restoreTarget": "temporary D1 deleted after test"
+}
