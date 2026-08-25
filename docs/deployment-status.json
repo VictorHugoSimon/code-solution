@@ -1,12 +1,18 @@
 {
-  "checkedAt": "2026-08-25T14:29:53.364Z",
-  "sourceCommit": "22f357401a10288160d896e4f070fa10cc9f1bd2",
+  "checkedAt": "2026-08-25T14:38:13.648Z",
+  "sourceCommit": "00d9f60baf0639448c191f6b5a85932a731e8163",
   "cloudflareSecretsConfigured": "true",
+  "personalCloudflareAccount": true,
   "crmD1Provision": "success",
   "crmD1DatabaseId": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d",
+  "allMigrationsApplied": "success",
   "contentWorkerDeploy": "success",
   "attendantWorkerDeploy": "success",
-  "publicHealthChatAndLeadSmokeTest": "success",
+  "productionSmoke": "success",
+  "crmAutomationSmoke": "success",
+  "acquisitionSmoke": "success",
+  "commercialAutomationCron": "*/30 * * * *",
+  "branding": "Code Solution",
   "contentWorkerUrl": "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev",
   "attendantWorkerUrl": "https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev"
 }
