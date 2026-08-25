@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-25T15:07:16.690Z",
-  "sourceCommit": "6616ca524fd3663ba15cc36e1640bc65bb565af4",
+  "checkedAt": "2026-08-25T15:08:49.040Z",
+  "sourceCommit": "6a53418f752f02e396fe9b23d0f2112135c30fb4",
   "build": "failure",
   "personalCloudflareCredentials": "skipped",
   "crmAdminSecretSync": "skipped",
@@ -9,10 +9,9 @@
   "crmBackendSmoke": "skipped",
   "project": "codesolution-site",
   "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
-  "attendanceUrl": "https://www.codesolution.com.br/painel/atendimento/",
-  "agendaUrl": "https://www.codesolution.com.br/painel/agenda/",
-  "prospectingUrl": "https://www.codesolution.com.br/painel/prospeccao/",
-  "reportsUrl": "https://www.codesolution.com.br/painel/relatorios/",
+  "usersUrl": "https://www.codesolution.com.br/painel/usuarios/",
+  "casesUrl": "https://www.codesolution.com.br/cases/",
+  "panelIdentity": "individual-revocable-d1",
   "panelNavigation": "validated",
   "branding": "Code Solution",
   "deploymentMode": "single-production-pipeline"
