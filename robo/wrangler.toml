@@ -10,6 +10,11 @@ crons = [
   "0 20 * * 5"
 ]
 
+[[d1_databases]]
+binding = "CRM_DB"
+database_name = "code-solution-crm"
+database_id = "5f2a71bc-e3bf-4063-b52d-48ad11132e1d"
+
 [ai]
 binding = "AI"
 
