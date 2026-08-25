@@ -44,4 +44,4 @@ quiz.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(quiz
 quiz.addEventListener('reset',()=>{document.getElementById('result').style.display='none';track('diagnostic_reset')});
 document.getElementById('whatsapp').addEventListener('click',()=>{const score=Number(document.getElementById('score').textContent||0);track('generate_lead',{method:'diagnostico_whatsapp',diagnostic_score:score});track('click_whatsapp',{source:'diagnostico',diagnostic_score:score})});
 track('diagnostic_view');
-</script></body></html>
+</script><script data-cs-acquisition-tracking src="/assets/acquisition-tracking.js" defer></script></body></html>
