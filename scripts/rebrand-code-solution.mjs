@@ -7,9 +7,26 @@ let replacements = 0;
 let filesChanged = 0;
 
 function replacementFor(match) {
-  // Human-facing legacy brand becomes Code Solution. Lowercase standalone
-  // analytics/source values become the neutral identifier "assistente".
   return match === match.toLowerCase() ? 'assistente' : 'Code Solution';
+}
+
+function applyBranding(before) {
+  let after = before;
+  const rules = [
+    [/\bcodi\b/gi, match => replacementFor(match)],
+    [/codi_/gi, 'assistant_'],
+    [/%20Codi%20/g, '%20Code%20Solution%20'],
+    [/%20codi%20/gi, '%20Code%20Solution%20'],
+    [/%22Codi%22/gi, '%22Code%20Solution%22'],
+  ];
+  for (const [pattern, replacement] of rules) {
+    const matches = after.match(pattern) || [];
+    if (matches.length) {
+      after = after.replace(pattern, replacement);
+      replacements += matches.length;
+    }
+  }
+  return after;
 }
 
 async function walk(dir) {
@@ -22,11 +39,9 @@ async function walk(dir) {
     }
     if (!textExtensions.has(path.extname(entry.name).toLowerCase())) continue;
     const before = await fs.readFile(full, 'utf8');
-    const matches = before.match(/\bcodi\b/gi) || [];
-    if (!matches.length) continue;
-    const after = before.replace(/\bcodi\b/gi, replacementFor);
+    const after = applyBranding(before);
+    if (after === before) continue;
     await fs.writeFile(full, after);
-    replacements += matches.length;
     filesChanged += 1;
   }
 }
@@ -44,7 +59,9 @@ async function verify(dir) {
     }
     if (!textExtensions.has(path.extname(entry.name).toLowerCase())) continue;
     const text = await fs.readFile(full, 'utf8');
-    if (/\bcodi\b/i.test(text)) leftovers.push(path.relative(process.cwd(), full));
+    if (/\bcodi\b/i.test(text) || /codi_/i.test(text) || /%20codi%20/i.test(text)) {
+      leftovers.push(path.relative(process.cwd(), full));
+    }
   }
 }
 await verify(root);
