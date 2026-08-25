@@ -1,18 +1,115 @@
 {
-  "checkedAt": "2026-08-25T00:46:29.451Z",
-  "sourceCommit": "f473a15f589f33bf82c5725856c73a0e16cb9213",
-  "planning": "failure",
-  "radar": "failure",
-  "social": "failure",
-  "metrics": "failure",
+  "checkedAt": "2026-08-25T00:50:04.487Z",
+  "sourceCommit": "6ae5516d306d7efcbf7ab228232064e2e26ebbb1",
+  "auth": {
+    "outcome": "success",
+    "http": 200,
+    "response": {
+      "ok": true,
+      "error": "",
+      "agent": "metrics",
+      "result": {
+        "date": "2026-08-24",
+        "prospects": 0,
+        "hot": 0,
+        "content": 0,
+        "articles": 0,
+        "leads": 2,
+        "hotLeads": 0,
+        "organic": 0
+      },
+      "build": "growth-orchestrator-2026-08-24.1"
+    }
+  },
+  "planning": {
+    "outcome": "failure",
+    "http": 500,
+    "response": {
+      "ok": false,
+      "error": "invalid_json_response",
+      "agent": "plan",
+      "result": null,
+      "build": "growth-orchestrator-2026-08-24.1"
+    }
+  },
+  "radar": {
+    "outcome": "success",
+    "http": 200,
+    "response": {
+      "ok": true,
+      "error": "",
+      "agent": "radar",
+      "result": {
+        "scanned": 0,
+        "prospectsSaved": 0,
+        "topicsSaved": 0
+      },
+      "build": "growth-orchestrator-2026-08-24.1"
+    }
+  },
+  "social": {
+    "outcome": "success",
+    "http": 200,
+    "response": {
+      "ok": true,
+      "error": "",
+      "agent": "social",
+      "result": {
+        "created": 4
+      },
+      "build": "growth-orchestrator-2026-08-24.1"
+    }
+  },
+  "metrics": {
+    "outcome": "success",
+    "http": 200,
+    "response": {
+      "ok": true,
+      "error": "",
+      "agent": "metrics",
+      "result": {
+        "date": "2026-08-24",
+        "prospects": 0,
+        "hot": 0,
+        "content": 4,
+        "articles": 0,
+        "leads": 2,
+        "hotLeads": 0,
+        "organic": 0
+      },
+      "build": "growth-orchestrator-2026-08-24.1"
+    }
+  },
   "status": "success",
   "growth": {
     "ok": true,
     "prospects": 0,
     "highIntent": 0,
-    "contentReady": 0,
+    "contentReady": 4,
     "topicsOpen": 0,
-    "recentRuns": [],
+    "recentRuns": [
+      {
+        "agent": "social",
+        "status": "success",
+        "started_at": "2026-08-25T00:49:58.775Z",
+        "completed_at": "2026-08-25T00:50:04.061Z",
+        "error_text": null
+      },
+      {
+        "agent": "radar",
+        "status": "success",
+        "started_at": "2026-08-25T00:49:43.691Z",
+        "completed_at": "2026-08-25T00:49:58.665Z",
+        "error_text": null
+      },
+      {
+        "agent": "planejamento",
+        "status": "failed",
+        "started_at": "2026-08-25T00:49:37.778Z",
+        "completed_at": "2026-08-25T00:49:43.572Z",
+        "error_text": "invalid_json_response"
+      }
+    ],
     "build": "growth-orchestrator-2026-08-24.1",
     "schedules": {
       "daily": "0 11 * * 1-5",
