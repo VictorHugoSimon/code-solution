@@ -159,7 +159,9 @@ jobs:
           BACKEND: ${{ steps.backend.outcome }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          git reset --hard HEAD
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
           mkdir -p docs
           node - <<'NODE'
           const fs=require('fs'),e=process.env;
@@ -181,8 +183,29 @@ jobs:
           git add docs/pages-deployment-status.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'chore: record Pages deployment status'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git reset --hard origin/main
+            node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            build:e.BUILD||'failure',personalCloudflareCredentials:e.CREDENTIALS||'failure',
+            crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',
+            publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',
+            project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
+            attendanceUrl:'https://www.codesolution.com.br/painel/atendimento/',
+            agendaUrl:'https://www.codesolution.com.br/painel/agenda/',
+            prospectingUrl:'https://www.codesolution.com.br/painel/prospeccao/',
+            reportsUrl:'https://www.codesolution.com.br/painel/relatorios/',
+            panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'
+          },null,2)+'\n');
+          NODE
+            git add docs/pages-deployment-status.json
+            git commit -m 'chore: record Pages deployment status' || true
+          done
+          exit 1
 
       - name: Enforce production release
         if: always()
