@@ -1,3 +1,3 @@
 Code Solution Pages production release trigger — 2026-08-24.
-Final brand launch redeploy: public assistant renamed from Codi to Code Solution.
+Final brand launch redeploy: public assistant renamed from Code Solution to Code Solution.
 No runtime behavior depends on this file.
