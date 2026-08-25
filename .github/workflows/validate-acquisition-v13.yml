@@ -1,0 +1,116 @@
+name: Validate acquisition v1.3 production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-acquisition-v13.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-acquisition-v13-production
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate source
+        id: source
+        run: |
+          set -euo pipefail
+          node --check robo/acquisition-insights.js
+          node --check robo/atendente-growth-runtime.js
+          grep -q 'acquisition_channel_goals' crm/migrations/0005_acquisition_goals.sql
+          grep -q 'acqGoals' deploy/painel/marketing/acquisition.js
+          grep -q 'acqLandings' deploy/painel/marketing/acquisition.js
+
+      - name: Validate D1 and production APIs
+        id: production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name='acquisition_channel_goals';" --json >/tmp/d1.json
+          grep -q 'acquisition_channel_goals' /tmp/d1.json
+
+          ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+          goals_http=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/goals.json -w '%{http_code}' "$ATTENDANT/crm/acquisition/goals?days=7" -H "x-crm-key: $CRM_ADMIN_KEY")
+          test "$goals_http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/goals.json');
+          if(x.ok!==true || !Array.isArray(x.goals)) throw new Error('goals endpoint invalid');
+          for(const g of x.goals){
+            if(!g.channel || !g.goals || !g.actual || !g.progress) throw new Error('goal shape invalid');
+          }
+          NODE
+
+          landing_http=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/landings.json -w '%{http_code}' "$ATTENDANT/crm/acquisition/landing-pages?days=30" -H "x-crm-key: $CRM_ADMIN_KEY")
+          test "$landing_http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/landings.json');
+          if(x.ok!==true || !Array.isArray(x.landingPages)) throw new Error('landing endpoint invalid');
+          NODE
+
+          unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/acquisition/goals?days=7")
+          test "$unauth" = 401
+
+      - name: Validate published Marketing bundle
+        id: marketing
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 3 https://www.codesolution.com.br/painel/marketing/acquisition.js >/tmp/acquisition.js
+          grep -q 'Metas semanais por canal' /tmp/acquisition.js
+          grep -q 'Conversão por landing page' /tmp/acquisition.js
+          grep -q 'acqGoals' /tmp/acquisition.js
+          grep -q 'acqLandings' /tmp/acquisition.js
+
+      - name: Persist validation
+        if: always()
+        env:
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          PROD_OUTCOME: ${{ steps.production.outcome }}
+          MARKETING_OUTCOME: ${{ steps.marketing.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/acquisition-v13-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            sourceValidation:e.SOURCE_OUTCOME||'failure',d1AndApiValidation:e.PROD_OUTCOME||'failure',
+            publishedMarketingValidation:e.MARKETING_OUTCOME||'failure',
+            goalsUrl:'/crm/acquisition/goals',landingPagesUrl:'/crm/acquisition/landing-pages',
+            status:[e.SOURCE_OUTCOME,e.PROD_OUTCOME,e.MARKETING_OUTCOME].every(x=>x==='success')?'ready':'blocked'
+          },null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Acquisition Validation Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/acquisition-v13-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record acquisition v1.3 validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce validation
+        if: always()
+        env:
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          PROD_OUTCOME: ${{ steps.production.outcome }}
+          MARKETING_OUTCOME: ${{ steps.marketing.outcome }}
+        run: |
+          test "$SOURCE_OUTCOME" = success
+          test "$PROD_OUTCOME" = success
+          test "$MARKETING_OUTCOME" = success
