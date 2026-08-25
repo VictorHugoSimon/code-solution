@@ -7,7 +7,7 @@ O painel usa identidades individuais persistidas no D1, sem armazenar senhas em 
 - Usuários: `panel_users`
 - Sessões: `panel_sessions`
 - Auditoria: `panel_audit_log`
-- Senhas: PBKDF2-SHA256 com salt individual e 180.000 iterações
+- Senhas: PBKDF2-SHA256 com salt individual e **100.000 iterações**, valor validado no runtime Cloudflare
 - Sessões: token opaco; apenas SHA-256 do token é persistido no D1
 - Expiração padrão: 8 horas
 - Alteração de senha, role ou bloqueio incrementa `session_version` e revoga sessões anteriores
@@ -79,4 +79,4 @@ O workflow `validate-panel-identity.yml` executa um teste real sem expor credenc
 6. comprova revogação;
 7. remove o usuário e seus dados de teste.
 
-O resultado auditável é persistido em `docs/panel-identity-status.json`.
+A evidência auditável é persistida em `docs/panel-identity-status.json` por uma validação de evidência dedicada.
