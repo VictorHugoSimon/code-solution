@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-08-25T17:23:28.504Z",
+  "sourceCommit": "fd9232279525436b7ab06233b18ed88a8fec4931",
+  "sourceValidation": "success",
+  "d1AndApiValidation": "success",
+  "publishedMarketingValidation": "failure",
+  "goalsUrl": "/crm/acquisition/goals",
+  "landingPagesUrl": "/crm/acquisition/landing-pages",
+  "status": "blocked"
+}
