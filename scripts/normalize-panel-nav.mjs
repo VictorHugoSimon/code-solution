@@ -11,6 +11,7 @@ const files = [
   'deploy/painel/prospeccao/index.html',
   'deploy/painel/relatorios/index.html',
   'deploy/painel/usuarios/index.html',
+  'deploy/painel/conta/index.html',
 ];
 
 const links = [
@@ -24,6 +25,7 @@ const links = [
   ['/painel/growth/', 'Growth', 'growth'],
   ['/painel/relatorios/', 'Relatórios', 'relatorios'],
   ['/painel/usuarios/', 'Usuários', 'usuarios'],
+  ['/painel/conta/', 'Minha conta', 'conta'],
 ];
 
 function currentModule(file) {
@@ -37,6 +39,7 @@ function currentModule(file) {
   if (file.includes('/growth/')) return 'growth';
   if (file.includes('/relatorios/')) return 'relatorios';
   if (file.includes('/usuarios/')) return 'usuarios';
+  if (file.includes('/conta/')) return 'conta';
   return 'visao';
 }
 
