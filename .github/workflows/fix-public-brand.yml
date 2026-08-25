@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/fix-public-brand.yml'
+      - 'scripts/rebrand-code-solution.mjs'
   workflow_dispatch:
 
 permissions:
@@ -27,10 +28,10 @@ jobs:
           node-version: 22
       - name: Normalize legacy public assistant branding
         run: node scripts/rebrand-code-solution.mjs
-      - name: Confirm no public Codi branding remains
+      - name: Confirm no public legacy branding remains
         run: |
-          if grep -RniE '\bCodi\b' deploy --include='*.html' --include='*.htm' --include='*.js' --include='*.json' --include='*.xml' --include='*.txt'; then
-            echo 'Legacy public branding still exists.' >&2
+          if grep -RniE '\bcodi\b' deploy --include='*.html' --include='*.htm' --include='*.js' --include='*.json' --include='*.xml' --include='*.txt'; then
+            echo 'Legacy public assistant branding still exists.' >&2
             exit 1
           fi
       - name: Commit normalized public bundle
