@@ -1,6 +1,6 @@
 name = "code-solution-atendente"
-main = "atendente-worker-runtime.js"
-compatibility_date = "2026-08-22"
+main = "atendente-growth-runtime.js"
+compatibility_date = "2026-08-24"
 
 [[kv_namespaces]]
 binding = "LEADS_KV"
