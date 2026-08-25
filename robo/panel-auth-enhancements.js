@@ -2,7 +2,7 @@ import { authenticatePanelSession } from './panel-auth.js';
 
 const LOGIN_WINDOW_MINUTES = 15;
 const LOGIN_FAILURE_LIMIT = 8;
-const PASSWORD_ITERATIONS = 180000;
+const PASSWORD_ITERATIONS = 100000;
 
 export async function handlePanelAuthEnhancements(request, env) {
   const url = new URL(request.url);

@@ -1,5 +1,5 @@
 const SESSION_HOURS = 8;
-const DEFAULT_ITERATIONS = 180000;
+const DEFAULT_ITERATIONS = 100000;
 const ROLES = new Set(['admin','comercial','marketing','leitura_executiva']);
 
 export async function handlePanelAuth(request, env) {

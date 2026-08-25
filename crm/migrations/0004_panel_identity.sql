@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS panel_users (
   role TEXT NOT NULL CHECK (role IN ('admin','comercial','marketing','leitura_executiva')),
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
-  password_iterations INTEGER NOT NULL DEFAULT 180000,
+  password_iterations INTEGER NOT NULL DEFAULT 100000,
   active INTEGER NOT NULL DEFAULT 1,
   session_version INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
