@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-25T14:34:36.011Z",
-  "sourceCommit": "cb553c86a33b4638ff6d183fe18a60a0382fc63f",
+  "checkedAt": "2026-08-25T14:39:54.860Z",
+  "sourceCommit": "2b86aaa4b3db0e58329fef9c040b75ccb43d7c9d",
   "build": "success",
   "personalCloudflareCredentials": "success",
   "crmAdminSecretSync": "success",
