@@ -17,7 +17,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           url=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/growth/status
-          for i in $(seq 1 18); do
+          for i in $(seq 1 24); do
             http=$(curl -sS -o /tmp/growth-health.json -w '%{http_code}' "$url" || true)
             if [ "$http" = 200 ] && node -e "const x=require('/tmp/growth-health.json');process.exit(x.ok===true?0:1)"; then
               exit 0
@@ -38,7 +38,7 @@ jobs:
           cat /tmp/growth-health.json || true
           exit 1
 
-      - name: Rotate one-time manual key
+      - name: Rotate bootstrap manual key
         id: key
         working-directory: robo
         env:
@@ -49,6 +49,22 @@ jobs:
           KEY=$(openssl rand -hex 32)
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           printf '%s' "$KEY" | npx wrangler@4 secret put MANUAL_KEY --config wrangler.toml >/tmp/secret-put.log
+          # A secret update creates a new Worker version and can take a few seconds
+          # to become visible at every edge. Do not call the manual route immediately.
+          sleep 18
+
+      - name: Verify manual route authentication
+        id: auth
+        continue-on-error: true
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          set -euo pipefail
+          http=$(curl -sS --max-time 60 -o /tmp/auth.json -w '%{http_code}' -X POST \
+            "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=metrics&key=${KEY}")
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$http" = 200
+          node -e "const x=require('/tmp/auth.json');if(x.ok!==true)process.exit(1)"
 
       - name: Run weekly planning agent
         id: plan
@@ -56,7 +72,11 @@ jobs:
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          curl -fsS --retry 3 --retry-delay 4 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=plan&key=${KEY}" -o /tmp/plan.json
+          set -euo pipefail
+          http=$(curl -sS --max-time 120 -o /tmp/plan.json -w '%{http_code}' -X POST \
+            "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=plan&key=${KEY}")
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$http" = 200
           node -e "const x=require('/tmp/plan.json');if(x.ok!==true)process.exit(1)"
 
       - name: Run market radar agent
@@ -65,7 +85,11 @@ jobs:
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          curl -fsS --retry 3 --retry-delay 4 --max-time 120 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=radar&key=${KEY}" -o /tmp/radar.json
+          set -euo pipefail
+          http=$(curl -sS --max-time 120 -o /tmp/radar.json -w '%{http_code}' -X POST \
+            "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=radar&key=${KEY}")
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$http" = 200
           node -e "const x=require('/tmp/radar.json');if(x.ok!==true)process.exit(1)"
 
       - name: Run social content agent
@@ -74,16 +98,24 @@ jobs:
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          curl -fsS --retry 3 --retry-delay 4 --max-time 120 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=social&key=${KEY}" -o /tmp/social.json
+          set -euo pipefail
+          http=$(curl -sS --max-time 120 -o /tmp/social.json -w '%{http_code}' -X POST \
+            "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=social&key=${KEY}")
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$http" = 200
           node -e "const x=require('/tmp/social.json');if(x.ok!==true)process.exit(1)"
 
-      - name: Snapshot growth metrics
+      - name: Snapshot final growth metrics
         id: metrics
         continue-on-error: true
         env:
           KEY: ${{ steps.key.outputs.key }}
         run: |
-          curl -fsS --retry 3 --retry-delay 4 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=metrics&key=${KEY}" -o /tmp/metrics.json
+          set -euo pipefail
+          http=$(curl -sS --max-time 60 -o /tmp/metrics.json -w '%{http_code}' -X POST \
+            "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=metrics&key=${KEY}")
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$http" = 200
           node -e "const x=require('/tmp/metrics.json');if(x.ok!==true)process.exit(1)"
 
       - name: Read final public Growth status
@@ -96,10 +128,16 @@ jobs:
       - name: Persist bootstrap status
         if: always()
         env:
+          AUTH: ${{ steps.auth.outcome }}
+          AUTH_HTTP: ${{ steps.auth.outputs.http }}
           PLAN: ${{ steps.plan.outcome }}
+          PLAN_HTTP: ${{ steps.plan.outputs.http }}
           RADAR: ${{ steps.radar.outcome }}
+          RADAR_HTTP: ${{ steps.radar.outputs.http }}
           SOCIAL: ${{ steps.social.outcome }}
+          SOCIAL_HTTP: ${{ steps.social.outputs.http }}
           METRICS: ${{ steps.metrics.outcome }}
+          METRICS_HTTP: ${{ steps.metrics.outputs.http }}
           STATUS: ${{ steps.status.outcome }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
@@ -108,10 +146,15 @@ jobs:
           const fs=require('fs'),e=process.env;
           const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return null}};
           const final=read('/tmp/final.json');
+          const compact=(p)=>{const x=read(p); if(!x)return null; return {ok:x.ok,error:x.error||'',agent:x.agent||'',result:x.result||null,build:x.build||''}};
           fs.writeFileSync('docs/growth-bootstrap-status.json',JSON.stringify({
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            planning:e.PLAN||'skipped',radar:e.RADAR||'skipped',social:e.SOCIAL||'skipped',metrics:e.METRICS||'skipped',status:e.STATUS||'skipped',
-            growth:final
+            auth:{outcome:e.AUTH||'skipped',http:Number(e.AUTH_HTTP||0),response:compact('/tmp/auth.json')},
+            planning:{outcome:e.PLAN||'skipped',http:Number(e.PLAN_HTTP||0),response:compact('/tmp/plan.json')},
+            radar:{outcome:e.RADAR||'skipped',http:Number(e.RADAR_HTTP||0),response:compact('/tmp/radar.json')},
+            social:{outcome:e.SOCIAL||'skipped',http:Number(e.SOCIAL_HTTP||0),response:compact('/tmp/social.json')},
+            metrics:{outcome:e.METRICS||'skipped',http:Number(e.METRICS_HTTP||0),response:compact('/tmp/metrics.json')},
+            status:e.STATUS||'skipped',growth:final
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution Growth Bot"
@@ -125,12 +168,14 @@ jobs:
       - name: Enforce bootstrap
         if: always()
         env:
+          AUTH: ${{ steps.auth.outcome }}
           PLAN: ${{ steps.plan.outcome }}
           RADAR: ${{ steps.radar.outcome }}
           SOCIAL: ${{ steps.social.outcome }}
           METRICS: ${{ steps.metrics.outcome }}
           STATUS: ${{ steps.status.outcome }}
         run: |
+          test "$AUTH" = success
           test "$PLAN" = success
           test "$RADAR" = success
           test "$SOCIAL" = success
