@@ -16,40 +16,45 @@ concurrency:
   group: deploy-workers-production
   cancel-in-progress: true
 
+env:
+  EXPECTED_CLOUDFLARE_ACCOUNT_ID: cad25fe6c91871bbafb58236cf9b9b81
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Detect Cloudflare credentials
+      - name: Require personal Cloudflare credentials
         id: cf
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_CLOUDFLARE_ACCOUNT_ID"
+          echo "configured=true" >> "$GITHUB_OUTPUT"
 
-          echo "configured=false" >> "$GITHUB_OUTPUT"
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is missing or empty."
-          fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is missing or empty."
-          fi
-          echo "Cloudflare credentials are required for a production Workers release."
-          exit 1
+      - name: Validate Worker source
+        run: |
+          set -euo pipefail
+          node --check robo/worker.js
+          node --check robo/atendente-worker.js
+          node --check robo/atendente-worker-runtime.js
+          node --check robo/atendente-growth-runtime.js
+          node --check robo/growth-api.js
+          node --check robo/crm-automation.js
 
-      - name: Provision CRM D1 and apply schema
+      - name: Provision CRM D1 and apply all migrations
         id: d1
-        if: steps.cf.outputs.configured == 'true'
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -58,8 +63,10 @@ jobs:
           set -euo pipefail
           npx wrangler@4 d1 list --json > /tmp/d1-list.json
           DB_ID=$(node - <<'NODE'
-          const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
-          const a=Array.isArray(x)?x:(x.result||x.databases||[]);const d=a.find(v=>v.name==='code-solution-crm');
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.databases||[]);
+          const d=a.find(v=>v.name==='code-solution-crm');
           process.stdout.write(d?.uuid||d?.id||'');
           NODE
           )
@@ -67,15 +74,32 @@ jobs:
             npx wrangler@4 d1 create code-solution-crm
             npx wrangler@4 d1 list --json > /tmp/d1-list.json
             DB_ID=$(node - <<'NODE'
-          const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
-          const a=Array.isArray(x)?x:(x.result||x.databases||[]);const d=a.find(v=>v.name==='code-solution-crm');
-          if(!d)process.exit(2);process.stdout.write(d.uuid||d.id||'');
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/d1-list.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.databases||[]);
+          const d=a.find(v=>v.name==='code-solution-crm');
+          if(!d) process.exit(2);
+          process.stdout.write(d.uuid||d.id||'');
           NODE
             )
           fi
           test -n "$DB_ID"
           echo "database_id=$DB_ID" >> "$GITHUB_OUTPUT"
-          npx wrangler@4 d1 execute code-solution-crm --remote --file=../crm/migrations/0001_init.sql --yes
+
+          for migration in ../crm/migrations/*.sql; do
+            echo "Applying $migration"
+            npx wrangler@4 d1 execute code-solution-crm --remote --file="$migration" --yes
+          done
+
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts') ORDER BY name;" --json > /tmp/schema-check.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync('/tmp/schema-check.json','utf8');
+          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts']) {
+            if(!text.includes(name)) throw new Error(`missing table ${name}`);
+          }
+          NODE
+
           cp wrangler-atendente.toml wrangler-atendente.deploy.toml
           cat >> wrangler-atendente.deploy.toml <<EOF
 
@@ -87,15 +111,13 @@ jobs:
 
       - name: Deploy content Worker
         id: content
-        if: steps.cf.outputs.configured == 'true'
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler.toml
 
-      - name: Sync optional content Worker secrets from GitHub
-        if: steps.cf.outputs.configured == 'true' && steps.content.outcome == 'success'
+      - name: Sync content Worker secrets
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -104,22 +126,20 @@ jobs:
           GITHUB_CONTENT_TOKEN: ${{ secrets.GITHUB_CONTENT_TOKEN }}
           MANUAL_KEY: ${{ secrets.MANUAL_KEY }}
         run: |
-          set -e
+          set -euo pipefail
           [ -z "$AI_API_KEY" ] || printf '%s' "$AI_API_KEY" | npx wrangler@4 secret put AI_API_KEY --config wrangler.toml
           [ -z "$GITHUB_CONTENT_TOKEN" ] || printf '%s' "$GITHUB_CONTENT_TOKEN" | npx wrangler@4 secret put GITHUB_TOKEN --config wrangler.toml
           [ -z "$MANUAL_KEY" ] || printf '%s' "$MANUAL_KEY" | npx wrangler@4 secret put MANUAL_KEY --config wrangler.toml
 
-      - name: Deploy attendant Worker with D1
+      - name: Deploy attendant Worker with D1 and commercial cron
         id: attendant
-        if: steps.cf.outputs.configured == 'true' && steps.d1.outcome == 'success'
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4 deploy --config wrangler-atendente.deploy.toml
 
-      - name: Sync optional attendant secrets from GitHub
-        if: steps.cf.outputs.configured == 'true' && steps.attendant.outcome == 'success'
+      - name: Sync attendant Worker secrets
         working-directory: robo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -130,23 +150,25 @@ jobs:
           WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
           OWNER_WHATSAPP: ${{ secrets.OWNER_WHATSAPP }}
         run: |
-          set -e
+          set -euo pipefail
           cfg=wrangler-atendente.deploy.toml
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 secret put CRM_ADMIN_KEY --config "$cfg"
           [ -z "$AI_API_KEY" ] || printf '%s' "$AI_API_KEY" | npx wrangler@4 secret put AI_API_KEY --config "$cfg"
-          [ -z "$CRM_ADMIN_KEY" ] || printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 secret put CRM_ADMIN_KEY --config "$cfg"
           [ -z "$WHATSAPP_TOKEN" ] || printf '%s' "$WHATSAPP_TOKEN" | npx wrangler@4 secret put WHATSAPP_TOKEN --config "$cfg"
           [ -z "$WHATSAPP_PHONE_ID" ] || printf '%s' "$WHATSAPP_PHONE_ID" | npx wrangler@4 secret put WHATSAPP_PHONE_ID --config "$cfg"
           [ -z "$OWNER_WHATSAPP" ] || printf '%s' "$OWNER_WHATSAPP" | npx wrangler@4 secret put OWNER_WHATSAPP --config "$cfg"
 
-      - name: Real production smoke for Workers
+      - name: Real production smoke for Workers CRM automation and acquisition
         id: smoke
-        if: steps.cf.outputs.configured == 'true' && steps.content.outcome == 'success' && steps.attendant.outcome == 'success'
         continue-on-error: true
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
           set -euo pipefail
-          sleep 8
+          sleep 10
           CONTENT=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev
           ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+
           curl -fsS --retry 5 --retry-delay 3 "$CONTENT/health" >/tmp/content.json
           curl -fsS --retry 5 --retry-delay 3 "$ATTENDANT/health" >/tmp/attendant.json
           node - <<'NODE'
@@ -155,7 +177,7 @@ jobs:
           if(a.ok!==true || a.service!=='code-solution-atendente' || a.storage!=='d1') throw new Error('attendant worker not on D1');
           NODE
 
-          chat_http=$(curl -sS --max-time 40 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
+          chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
             -H 'content-type: application/json' \
             -H 'origin: https://www.codesolution.com.br' \
             --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"deploy_smoke","consent":true}}')
@@ -163,9 +185,9 @@ jobs:
           node - <<'NODE'
           const x=require('/tmp/chat.json');
           if(x.ok!==true || typeof x.message!=='string' || x.message.length<10) throw new Error('chat invalid');
+          if(/\bCodi\b/i.test(x.message)) throw new Error('legacy assistant branding returned');
           NODE
 
-          # Non-destructive lead contract check: invalid fields must be rejected before write.
           lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" \
             -H 'content-type: application/json' \
             -H 'origin: https://www.codesolution.com.br' \
@@ -179,7 +201,26 @@ jobs:
           unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")
           test "$unauth" = 401
 
-      - name: Persist Worker status
+          for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary; do
+            file=$(echo "$route" | tr '/?' '__')
+            http=$(curl -sS --max-time 30 -o "/tmp/${file}.json" -w '%{http_code}' "$ATTENDANT/crm/$route" -H "x-crm-key: $CRM_ADMIN_KEY")
+            test "$http" = 200
+            FILE="/tmp/${file}.json" node - <<'NODE'
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync(process.env.FILE,'utf8'));
+          if(x.ok!==true) throw new Error(`authenticated CRM smoke failed for ${process.env.FILE}`);
+          NODE
+          done
+
+          auto_http=$(curl -sS --max-time 40 -o /tmp/automation.json -w '%{http_code}' "$ATTENDANT/crm/automation/run" \
+            -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
+          test "$auto_http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/automation.json');
+          if(x.ok!==true || typeof x.leadsScanned!=='number') throw new Error('commercial automation run invalid');
+          NODE
+
+      - name: Persist Worker release status
         if: always()
         env:
           CONFIGURED: ${{ steps.cf.outputs.configured }}
@@ -195,9 +236,11 @@ jobs:
           const fs=require('fs'),e=process.env;
           fs.writeFileSync('docs/deployment-status.json',JSON.stringify({
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            cloudflareSecretsConfigured:e.CONFIGURED||'false',crmD1Provision:e.D1_OUTCOME||'skipped',crmD1DatabaseId:e.D1_ID||'',
+            cloudflareSecretsConfigured:e.CONFIGURED||'false',personalCloudflareAccount:true,
+            crmD1Provision:e.D1_OUTCOME||'skipped',crmD1DatabaseId:e.D1_ID||'',allMigrationsApplied:e.D1_OUTCOME||'skipped',
             contentWorkerDeploy:e.CONTENT_OUTCOME||'skipped',attendantWorkerDeploy:e.ATTENDANT_OUTCOME||'skipped',
-            publicHealthChatAndLeadSmokeTest:e.SMOKE_OUTCOME||'skipped',
+            productionSmoke:e.SMOKE_OUTCOME||'skipped',crmAutomationSmoke:e.SMOKE_OUTCOME||'skipped',acquisitionSmoke:e.SMOKE_OUTCOME||'skipped',
+            commercialAutomationCron:'*/30 * * * *',branding:'Code Solution',
             contentWorkerUrl:'https://code-solution-robo.victorhugoteixeirasimon6.workers.dev',
             attendantWorkerUrl:'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
           },null,2)+'\n');
@@ -206,7 +249,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add docs/deployment-status.json
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: record worker deployment status"
+          git commit -m "chore: record hardened Worker release status"
           git pull --rebase origin main
           git push origin HEAD:main
 
