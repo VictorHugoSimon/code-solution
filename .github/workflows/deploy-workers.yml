@@ -55,6 +55,8 @@ jobs:
           node --check robo/atendente-auth-growth-runtime.js
           node --check robo/growth-api.js
           node --check robo/crm-automation.js
+          node --check robo/autonomous-os.js
+          node --check robo/autonomy-entry-runtime.js
 
       - name: Provision CRM D1 and apply all migrations
         id: d1
@@ -94,11 +96,11 @@ jobs:
             npx wrangler@4 d1 execute code-solution-crm --remote --file="$migration" --yes
           done
 
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log') ORDER BY name;" --json > /tmp/schema-check.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals') ORDER BY name;" --json > /tmp/schema-check.json
           node - <<'NODE'
           const fs=require('fs');
           const text=fs.readFileSync('/tmp/schema-check.json','utf8');
-          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log']) {
+          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals']) {
             if(!text.includes(name)) throw new Error(`missing table ${name}`);
           }
           NODE
@@ -134,7 +136,7 @@ jobs:
           [ -z "$GITHUB_CONTENT_TOKEN" ] || printf '%s' "$GITHUB_CONTENT_TOKEN" | npx wrangler@4 secret put GITHUB_TOKEN --config wrangler.toml
           [ -z "$MANUAL_KEY" ] || printf '%s' "$MANUAL_KEY" | npx wrangler@4 secret put MANUAL_KEY --config wrangler.toml
 
-      - name: Deploy attendant Worker with D1 and commercial cron
+      - name: Deploy attendant Worker with D1 and autonomous cron
         id: attendant
         working-directory: robo
         env:
@@ -161,7 +163,7 @@ jobs:
           [ -z "$WHATSAPP_PHONE_ID" ] || printf '%s' "$WHATSAPP_PHONE_ID" | npx wrangler@4 secret put WHATSAPP_PHONE_ID --config "$cfg"
           [ -z "$OWNER_WHATSAPP" ] || printf '%s' "$OWNER_WHATSAPP" | npx wrangler@4 secret put OWNER_WHATSAPP --config "$cfg"
 
-      - name: Real production smoke for Workers CRM automation acquisition and panel security
+      - name: Real production smoke for Workers CRM Autonomous OS and panel security
         id: smoke
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
@@ -195,11 +197,12 @@ jobs:
           NODE
 
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/autonomy/summary")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/me/security")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H 'content-type: application/json' --data '{}')" = 401
 
-          for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary; do
+          for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary autonomy/summary autonomy/tasks autonomy/approvals; do
             file=$(echo "$route" | tr '/?' '__')
             http=$(curl -sS --max-time 30 -o "/tmp/${file}.json" -w '%{http_code}' "$ATTENDANT/crm/$route" -H "x-crm-key: $CRM_ADMIN_KEY")
             test "$http" = 200
@@ -217,18 +220,32 @@ jobs:
           if(x.ok!==true || typeof x.leadsScanned!=='number') throw new Error('commercial automation run invalid');
           NODE
 
+          autonomy_http=$(curl -sS --max-time 45 -o /tmp/autonomy-run.json -w '%{http_code}' "$ATTENDANT/crm/autonomy/run" -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
+          test "$autonomy_http" = 200
+          curl -fsS --max-time 30 "$ATTENDANT/crm/autonomy/summary" -H "x-crm-key: $CRM_ADMIN_KEY" >/tmp/autonomy-summary.json
+          node - <<'NODE'
+          const run=require('/tmp/autonomy-run.json');
+          const x=require('/tmp/autonomy-summary.json');
+          if(run.ok!==true || typeof run.tasksCreated!=='number' || typeof run.tasksExecuted!=='number' || typeof run.approvalsRequested!=='number') throw new Error('autonomous run invalid');
+          if(x.ok!==true || !Array.isArray(x.agents) || !Array.isArray(x.goals) || !Array.isArray(x.pendingApprovals)) throw new Error('autonomy summary invalid');
+          for(const id of ['orchestrator','sales_ops','prospecting','content','reliability']) if(!x.agents.some(a=>a.id===id)) throw new Error(`missing autonomy agent ${id}`);
+          if(x.policy?.failMode!=='fail_closed') throw new Error('autonomy policy must fail closed');
+          if(!x.policy?.approvalRequired?.includes('external_message') || !x.policy?.approvalRequired?.includes('proposal_send') || !x.policy?.approvalRequired?.includes('destructive_change')) throw new Error('critical approval gates missing');
+          NODE
+
       - name: Publish release summary
         if: always()
         run: |
           {
-            echo '## Code Solution · Workers production release'
+            echo '## Code Solution · Workers + Autonomous OS production release'
             echo ''
             echo '- Source: `${{ github.sha }}`'
             echo '- Cloudflare account: personal account enforced'
             echo '- D1 migrations: `${{ steps.d1.outcome }}`'
             echo '- Content Worker: `${{ steps.content.outcome }}`'
-            echo '- Attendant Worker: `${{ steps.attendant.outcome }}`'
+            echo '- Attendant + Autonomous OS Worker: `${{ steps.attendant.outcome }}`'
             echo '- Production smoke: `${{ steps.smoke.outcome }}`'
+            echo '- External critical actions: approval gated'
             echo '- Repository writes: disabled'
           } >> "$GITHUB_STEP_SUMMARY"
 
