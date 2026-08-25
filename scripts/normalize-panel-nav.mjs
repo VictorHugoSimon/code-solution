@@ -10,6 +10,7 @@ const files = [
   'deploy/painel/agenda/index.html',
   'deploy/painel/prospeccao/index.html',
   'deploy/painel/relatorios/index.html',
+  'deploy/painel/usuarios/index.html',
 ];
 
 const links = [
@@ -22,6 +23,7 @@ const links = [
   ['/painel/inteligencia/', 'Inteligência', 'inteligencia'],
   ['/painel/growth/', 'Growth', 'growth'],
   ['/painel/relatorios/', 'Relatórios', 'relatorios'],
+  ['/painel/usuarios/', 'Usuários', 'usuarios'],
 ];
 
 function currentModule(file) {
@@ -34,6 +36,7 @@ function currentModule(file) {
   if (file.includes('/inteligencia/')) return 'inteligencia';
   if (file.includes('/growth/')) return 'growth';
   if (file.includes('/relatorios/')) return 'relatorios';
+  if (file.includes('/usuarios/')) return 'usuarios';
   return 'visao';
 }
 
