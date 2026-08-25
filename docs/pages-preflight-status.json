@@ -1,24 +1,24 @@
 {
-  "checkedAt": "2026-08-24T00:57:14.956Z",
-  "sourceCommit": "ce70da913f2c2dec5584cbbe8495137937baf337",
+  "checkedAt": "2026-08-25T19:01:25.718Z",
+  "sourceCommit": "318de845950d86214a761e3aa5d85ceedffdba4b",
   "credentialsConfigured": true,
   "projectsHttp": 200,
   "projectsApiSuccess": true,
   "projectFound": true,
   "project": "codesolution-site",
   "deployExit": 0,
-  "deployLogTail": "npm warn exec The following package was not found and will be installed: wrangler@4.125.0\n\n ⛅️ wrangler 4.125.0\n────────────────────\nUploading... (27/28)\nUploading... (28/28)\n✨ Success! Uploaded 1 files (27 already uploaded) (0.76 sec)\n\n✨ Uploading _headers\n✨ Compiled Worker successfully\n✨ Uploading Worker bundle\n🌎 Deploying...\n✨ Deployment complete! Take a peek over at https://c80845ac.codesolution-site.pages.dev\n",
+  "deployLogTail": "npm warn exec The following package was not found and will be installed: wrangler@4.125.0\n\n ⛅️ wrangler 4.125.0\n────────────────────\nUploading... (48/49)\nUploading... (49/49)\n✨ Success! Uploaded 1 files (48 already uploaded) (0.94 sec)\n\n✨ Uploading _headers\n✨ Compiled Worker successfully\n✨ Uploading Worker bundle\n🌎 Deploying...\n✨ Deployment complete! Take a peek over at https://5809d5b3.codesolution-site.pages.dev\n",
   "projects": [
     {
       "name": "codesolution-site",
       "productionBranch": "main",
       "subdomain": "codesolution-site.pages.dev",
       "latestDeployment": {
-        "id": "c80845ac-fa5f-4acd-9ff9-e9c4d21d7260",
-        "url": "https://c80845ac.codesolution-site.pages.dev",
+        "id": "5809d5b3-fdb3-43a5-8393-94eae8dc29b5",
+        "url": "https://5809d5b3.codesolution-site.pages.dev",
         "environment": "production",
-        "createdOn": "2026-08-24T00:57:05.075214Z",
-        "commitHash": "ce70da913f2c2dec5584cbbe8495137937baf337"
+        "createdOn": "2026-08-25T19:01:11.713176Z",
+        "commitHash": "318de845950d86214a761e3aa5d85ceedffdba4b"
       }
     },
     {
@@ -64,15 +64,15 @@
   "domains": [
     {
       "name": "codesolution.com.br",
-      "status": "pending",
-      "verificationStatus": "pending",
-      "verificationError": "CNAME record not set"
+      "status": "active",
+      "verificationStatus": "active",
+      "verificationError": ""
     },
     {
       "name": "www.codesolution.com.br",
-      "status": "pending",
-      "verificationStatus": "pending",
-      "verificationError": "CNAME record not set"
+      "status": "active",
+      "verificationStatus": "active",
+      "verificationError": ""
     }
   ],
   "domainsErrors": [],
@@ -80,42 +80,102 @@
   "deploymentsApiSuccess": true,
   "deployments": [
     {
-      "id": "c80845ac-fa5f-4acd-9ff9-e9c4d21d7260",
-      "url": "https://c80845ac.codesolution-site.pages.dev",
+      "id": "5809d5b3-fdb3-43a5-8393-94eae8dc29b5",
+      "url": "https://5809d5b3.codesolution-site.pages.dev",
       "environment": "production",
-      "createdOn": "2026-08-24T00:57:05.075214Z",
-      "commitHash": "ce70da913f2c2dec5584cbbe8495137937baf337",
+      "createdOn": "2026-08-25T19:01:11.713176Z",
+      "commitHash": "318de845950d86214a761e3aa5d85ceedffdba4b",
       "branch": "main",
       "stage": "deploy",
       "stageStatus": "success"
     },
     {
-      "id": "8695dbc8-44c8-41fe-b401-ca824b50133f",
-      "url": "https://8695dbc8.codesolution-site.pages.dev",
+      "id": "334bc6e8-3c1b-450d-9711-76478548f5e7",
+      "url": "https://334bc6e8.codesolution-site.pages.dev",
       "environment": "production",
-      "createdOn": "2026-08-24T00:53:57.231565Z",
-      "commitHash": "105428cab1e61beeb03e6271cf77f0ed64eadb27",
+      "createdOn": "2026-08-25T19:00:31.710503Z",
+      "commitHash": "145f4711a8f6be836fcb2394e35058834b01a4ef",
       "branch": "main",
       "stage": "deploy",
       "stageStatus": "success"
     },
     {
-      "id": "1679e759-10b5-46f9-9946-a6052e85bb14",
-      "url": "https://1679e759.codesolution-site.pages.dev",
+      "id": "342b53bc-6e11-4fcd-a2cf-7d0488681127",
+      "url": "https://342b53bc.codesolution-site.pages.dev",
       "environment": "production",
-      "createdOn": "2026-08-24T00:52:27.276507Z",
-      "commitHash": "5c178556d49bc260f2e03146b660e57c87df60a3",
+      "createdOn": "2026-08-25T18:34:00.057088Z",
+      "commitHash": "2f05007c77dbff8754dbf92ca19dd44a0bba3977",
       "branch": "main",
       "stage": "deploy",
       "stageStatus": "success"
     },
     {
-      "id": "59535fbe-90f6-408e-b3a1-5c57fa86d2d4",
-      "url": "https://59535fbe.codesolution-site.pages.dev",
-      "environment": "preview",
-      "createdOn": "2026-08-24T00:33:45.432586Z",
-      "commitHash": "c35a2d2a4949f5a76511b42dfff6cf4a01e6ca19",
-      "branch": "HEAD",
+      "id": "57ba1623-6160-4819-a347-05ebc33d712e",
+      "url": "https://57ba1623.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:33:10.953443Z",
+      "commitHash": "504de15e16eeb6c4172e4b03f656cc1deb38f688",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "402d1665-6c67-4d3f-898d-df9ce4e3c9a0",
+      "url": "https://402d1665.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:22:20.304079Z",
+      "commitHash": "731b9946107066907de96bfbabbde3a821826eb6",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "3568cc20-a072-4f2c-a116-1d0d9f5ba2b4",
+      "url": "https://3568cc20.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:21:31.476483Z",
+      "commitHash": "738a174b5dfa08d3bd432e90862f5b1b30022daa",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "ad75a188-f730-4e90-91da-0b4b2b8ddc93",
+      "url": "https://ad75a188.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:04:20.919084Z",
+      "commitHash": "5cd1eed203b1b64a6239ef0a3b0830cd954cd459",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "33af262c-bce0-4dba-8214-cda3bbedec50",
+      "url": "https://33af262c.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:02:55.700576Z",
+      "commitHash": "cc062b0260b18ce3cb383327b851e46033a81c4a",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "38caf617-29d4-4e7a-8545-095d7222a536",
+      "url": "https://38caf617.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:02:03.777279Z",
+      "commitHash": "1b44a2ba7785f988697452b3f31901297aa79b0b",
+      "branch": "main",
+      "stage": "deploy",
+      "stageStatus": "success"
+    },
+    {
+      "id": "92dddf67-b66a-4740-af1e-a724b3d45396",
+      "url": "https://92dddf67.codesolution-site.pages.dev",
+      "environment": "production",
+      "createdOn": "2026-08-25T18:00:36.679474Z",
+      "commitHash": "dd599ce69466e51e0043fdeff7b33bc669a0f963",
+      "branch": "main",
       "stage": "deploy",
       "stageStatus": "success"
     }
