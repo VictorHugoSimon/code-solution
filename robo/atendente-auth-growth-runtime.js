@@ -12,8 +12,25 @@ export default {
     }
     if (enhancedAuth) return enhancedAuth;
 
-    const auth = await handlePanelAuth(request, env);
-    if (auth) return auth;
+    try {
+      const auth = await handlePanelAuth(request, env);
+      if (auth) return auth;
+    } catch (error) {
+      const detail = String(error?.message || error || 'unknown_error').replace(/[\r\n\t]/g, ' ').slice(0, 300);
+      console.error('Core panel authentication failed.', detail);
+      const url = new URL(request.url);
+      if (url.pathname.startsWith('/auth/')) {
+        return new Response(JSON.stringify({ ok:false, error:'panel_auth_exception', detail }), {
+          status: 500,
+          headers: {
+            'content-type':'application/json; charset=utf-8',
+            'cache-control':'no-store',
+            'x-content-type-options':'nosniff',
+          },
+        });
+      }
+      throw error;
+    }
 
     return growthRuntime.fetch(request, env, ctx);
   },
