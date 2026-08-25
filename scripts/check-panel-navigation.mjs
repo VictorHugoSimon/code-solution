@@ -8,6 +8,7 @@ const panels = [
   'deploy/painel/prospeccao/index.html',
   'deploy/painel/marketing/index.html',
   'deploy/painel/inteligencia/index.html',
+  'deploy/painel/growth/index.html',
   'deploy/painel/relatorios/index.html',
 ];
 
@@ -19,6 +20,7 @@ const hrefs = [
   '/painel/prospeccao/',
   '/painel/marketing/',
   '/painel/inteligencia/',
+  '/painel/growth/',
   '/painel/relatorios/',
   '/painel/logout/',
 ];
@@ -67,4 +69,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Panel navigation OK: one global link per module and lead deep-links scoped to row actions.');
+console.log('Panel navigation OK: one global link per module, Growth included, and lead deep-links scoped to row actions.');
