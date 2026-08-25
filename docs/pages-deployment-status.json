@@ -1,18 +1,19 @@
 {
-  "checkedAt": "2026-08-25T09:53:06.417Z",
-  "sourceCommit": "a4a8ec21776f05dcd0b76088a3d136eba214c01f",
+  "checkedAt": "2026-08-25T11:45:21.594Z",
+  "sourceCommit": "f89f83bfb03a6ad21c805d4fcd452000cfb1d504",
   "build": "success",
   "personalCloudflareCredentials": "success",
   "crmAdminSecretSync": "success",
   "pagesDeploy": "success",
-  "publicSmokeTest": "cancelled",
-  "crmBackendSmoke": "skipped",
+  "publicSmokeTest": "success",
+  "crmBackendSmoke": "success",
   "project": "codesolution-site",
   "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
   "attendanceUrl": "https://www.codesolution.com.br/painel/atendimento/",
   "agendaUrl": "https://www.codesolution.com.br/painel/agenda/",
   "prospectingUrl": "https://www.codesolution.com.br/painel/prospeccao/",
   "reportsUrl": "https://www.codesolution.com.br/painel/relatorios/",
+  "panelNavigation": "validated",
   "branding": "Code Solution",
   "deploymentMode": "single-production-pipeline"
 }
