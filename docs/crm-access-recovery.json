@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-08-25T13:11:18.760Z",
+  "sourceCommit": "8f8377af389a3a796b827545cb0d51602571954c",
+  "loginHttp": 200,
+  "panelHttp": 302,
+  "panelLocation": "https://www.codesolution.com.br/painel/login/?next=%2Fpainel%2Fcrm%2F",
+  "loginUrl": "https://www.codesolution.com.br/painel/login/",
+  "username": "admin",
+  "status": "success"
+}
