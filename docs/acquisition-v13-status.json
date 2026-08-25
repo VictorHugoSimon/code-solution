@@ -1,10 +1,11 @@
 {
-  "checkedAt": "2026-08-25T17:23:28.504Z",
-  "sourceCommit": "fd9232279525436b7ab06233b18ed88a8fec4931",
+  "checkedAt": "2026-08-25T21:32:18.112Z",
+  "sourceCommit": "0fde9310eb829867dcb4725be8c3c1767e3f06ac",
+  "deployedPagesCommit": "28f0cee4b2e9370fe054118dbe3a80838b0efb7f",
   "sourceValidation": "success",
   "d1AndApiValidation": "success",
-  "publishedMarketingValidation": "failure",
+  "publishedMarketingValidation": "success",
   "goalsUrl": "/crm/acquisition/goals",
   "landingPagesUrl": "/crm/acquisition/landing-pages",
-  "status": "blocked"
+  "status": "ready"
 }
