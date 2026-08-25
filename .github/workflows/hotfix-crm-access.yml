@@ -1,0 +1,88 @@
+name: Hotfix CRM access
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/hotfix-crm-access.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ownership and bundle
+        env:
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test "$CF_ACCOUNT" = cad25fe6c91871bbafb58236cf9b9b81
+          test -n "$CF_TOKEN"
+          test -n "$CRM_KEY"
+          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
+          grep -q "c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325" deploy/_worker.js
+          node --check deploy/_worker.js
+
+      - name: Sync CRM secret to Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: printf '%s' "$CRM_KEY" | npx wrangler@4.125.0 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+
+      - name: Deploy Pages production
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler@4.125.0 pages deploy deploy --project-name=codesolution-site --branch=main --commit-hash="$GITHUB_SHA" --commit-message="CRM access hotfix"
+
+      - name: Verify live CRM access
+        id: live
+        env:
+          CRM_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          sleep 12
+          p=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/p.html -w '%{http_code}' https://codesolution-site.pages.dev/painel/login/)
+          w=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/w.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          test "$p" = 200
+          test "$w" = 200
+          grep -q 'Acesso ao CRM' /tmp/w.html
+          grep -q 'name="username"' /tmp/w.html
+          grep -q 'name="password"' /tmp/w.html
+          h=$(mktemp); curl -sS -D "$h" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          c=$(head -n1 "$h" | awk '{print $2}')
+          l=$(grep -i '^location:' "$h" | tail -1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$c" = 302
+          echo "$l" | grep -q '/painel/login/'
+          b=$(curl -sS -o /tmp/b.json -w '%{http_code}' -H "x-crm-key: $CRM_KEY" https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
+          test "$b" = 200
+          echo "pages=$p" >> "$GITHUB_OUTPUT"
+          echo "official=$w" >> "$GITHUB_OUTPUT"
+          echo "crm=$c" >> "$GITHUB_OUTPUT"
+          echo "location=$l" >> "$GITHUB_OUTPUT"
+          echo "backend=$b" >> "$GITHUB_OUTPUT"
+
+      - name: Record success
+        env:
+          PAGES: ${{ steps.live.outputs.pages }}
+          OFFICIAL: ${{ steps.live.outputs.official }}
+          CRM: ${{ steps.live.outputs.crm }}
+          LOCATION: ${{ steps.live.outputs.location }}
+          BACKEND: ${{ steps.live.outputs.backend }}
+        run: |
+          mkdir -p docs
+          printf '{"checkedAt":"%s","status":"success","loginUrl":"https://www.codesolution.com.br/painel/login/","username":"admin","pagesLoginHttp":%s,"officialLoginHttp":%s,"crmHttp":%s,"crmLocation":"%s","backendHttp":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PAGES" "$OFFICIAL" "$CRM" "$LOCATION" "$BACKEND" > docs/crm-login-release.json
+          git config user.name 'Code Solution CRM Hotfix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/crm-login-release.json
+          git commit -m 'chore: record CRM login release' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
