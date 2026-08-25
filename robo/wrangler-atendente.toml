@@ -1,5 +1,5 @@
 name = "code-solution-atendente"
-main = "atendente-auth-growth-runtime.js"
+main = "autonomy-entry-runtime.js"
 compatibility_date = "2026-08-24"
 
 [[kv_namespaces]]
