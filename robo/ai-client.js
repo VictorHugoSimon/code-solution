@@ -4,7 +4,24 @@ const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant';
 
 export async function generateJson(env, system, prompt, options = {}) {
   const text = await generateText(env, system, prompt, { ...options, json: true });
-  return parseJsonObject(text);
+  try {
+    return parseJsonObject(text);
+  } catch (firstError) {
+    // LLMs occasionally wrap or truncate JSON even when explicitly instructed.
+    // Run one compact repair pass instead of failing an entire scheduled agent.
+    const repairSystem = 'Você é um reparador determinístico de JSON. Receba uma saída imperfeita e devolva SOMENTE um único objeto JSON válido. Preserve os dados existentes, remova comentários/markdown, feche estruturas incompletas e não acrescente fatos novos.';
+    const repairPrompt = `Converta a saída abaixo em JSON válido. Se a resposta estiver truncada, preserve apenas os itens completos que já aparecem e feche corretamente o objeto/arrays.\n\nSAÍDA ORIGINAL:\n${String(text || '').slice(0, 14000)}`;
+    const repaired = await generateText(env, repairSystem, repairPrompt, {
+      temperature: 0,
+      maxTokens: Math.max(1800, Math.min(3600, Number(options.maxTokens || 2200))),
+      json: true,
+    });
+    try {
+      return parseJsonObject(repaired);
+    } catch {
+      throw firstError;
+    }
+  }
 }
 
 export async function generateText(env, system, prompt, options = {}) {
