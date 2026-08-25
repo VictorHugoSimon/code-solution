@@ -4,6 +4,8 @@ Atualizado em 25/08/2026.
 
 ## Estado atual
 
+**Plataforma interna concluída e operacional em Produção.**
+
 Produção oficial: `https://www.codesolution.com.br/`
 
 Plataforma comercial disponível:
@@ -16,12 +18,16 @@ Plataforma comercial disponível:
 - Inteligência Comercial;
 - Growth Engine;
 - Relatórios Comerciais;
+- Saúde da Operação;
 - Assistente Code Solution;
 - captura de leads integrada ao D1/CRM;
 - Workers AI;
 - deploy automático GitHub → Cloudflare Pages/Workers;
 - identidades individuais e revogáveis no painel;
-- automação comercial agendada a cada 30 minutos.
+- automação comercial agendada a cada 30 minutos;
+- monitor horário de Produção;
+- alertas de falha de deploy;
+- continuidade D1 com Time Travel, export efêmero e teste real de restauração temporária.
 
 ## v1.1 — Operação comercial assistida
 
@@ -52,26 +58,31 @@ Status: **núcleo interno concluído e ativo em produção**.
 - [x] histórico de alteração de owner e eventos de SLA;
 - [x] dashboard de velocidade comercial: primeiro contato, discovery, proposta e ganho;
 - [x] execução automática do motor comercial a cada 30 minutos;
-- [ ] notificação externa de novos alertas via WhatsApp Cloud API ou e-mail transacional.
-
-Dependências externas opcionais:
-- WhatsApp Cloud API para mensagens/notificações automáticas;
-- e-mail transacional para alertas e follow-ups.
+- [ ] notificação externa de novos alertas via WhatsApp Cloud API ou e-mail transacional — **integração externa opcional**.
 
 ## v1.3 — Growth e aquisição mensurável
 
-Status: **em produção / consolidação final**.
+Status: **núcleo interno concluído e em produção**.
 
 - [x] UTMs e origem persistidas nos eventos e leads vinculados;
 - [x] funil visita → engajamento → formulário → lead → ganho;
 - [x] dashboard por origem e campanha;
 - [x] conteúdo publicado → lead influenciado;
 - [x] tracking de CTA, WhatsApp, assistente, diagnóstico, calculadora, blog e cases;
-- [ ] metas semanais por canal orgânico;
-- [ ] dashboard explícito de conversão por landing page;
-- [ ] ranking de campanhas por eficiência comercial;
-- [ ] Meta Pixel, somente após Pixel ID oficial;
-- [ ] GA4, somente após Measurement ID oficial.
+- [x] metas semanais por canal orgânico;
+- [x] dashboard explícito de conversão por landing page;
+- [x] ranking de campanhas por eficiência comercial;
+- [ ] Meta Pixel — depende do Pixel ID oficial da Code Solution;
+- [ ] GA4 — depende do Measurement ID oficial da Code Solution.
+
+### Ranking de campanhas
+
+O ranking interno não inventa CAC/ROAS sem custo de mídia. O Índice de Eficiência Comercial prioriza campanhas por:
+- 50% conversão Lead → Ganho;
+- 30% proporção de leads quentes;
+- 20% score médio dos leads.
+
+Quando investimento de mídia for integrado, CAC/CPA/ROAS poderão ser adicionados separadamente.
 
 ## v1.4 — Usuários e governança
 
@@ -81,27 +92,56 @@ Status: **concluída em produção**.
 - [x] perfis Administrador, Comercial, Marketing e Leitura Executiva;
 - [x] auditoria de login e alterações críticas;
 - [x] sessões individuais revogáveis;
-- [x] autenticação PBKDF2-SHA256 com senha não armazenada em texto;
+- [x] autenticação PBKDF2-SHA256, 100.000 iterações, salt individual e senha não armazenada em texto;
 - [x] tela de gestão de usuários em `/painel/usuarios/`;
 - [x] STAGE com dados de identidade isolados da Produção.
 
 ## v1.5 — Observabilidade e continuidade
 
-Prioridade: média.
+Status: **concluída para operação interna**.
 
-1. Monitor de uptime do site e Workers.
-2. Alertas para falha de deploy.
-3. Smoke pós-release obrigatório.
-4. Backup/export periódico do D1.
-5. Teste de restauração do CRM.
-6. Painel técnico de saúde da operação.
-7. Runbook de incidente e rollback.
+- [x] monitor horário de uptime do site, login, Workers e CRM;
+- [x] abertura/fechamento automático de incidentes de health;
+- [x] alertas específicos para falha de deploy Pages/Workers;
+- [x] smoke pós-release obrigatório e fail-closed;
+- [x] Time Travel do D1 validado;
+- [x] export periódico do D1 somente para runner efêmero;
+- [x] teste real de restauração em D1 temporário;
+- [x] exclusão automática do banco temporário e dump após teste;
+- [x] nenhum backup sensível versionado no repositório público;
+- [x] painel técnico de Saúde da Operação em `/painel/relatorios/saude/`;
+- [x] runbook de incidente e rollback em `docs/RUNBOOK-PRODUCAO.md`.
 
-## Próxima execução recomendada
+## Evidências de fechamento
 
-1. concluir v1.3 com metas semanais por canal e conversão por landing page;
-2. depois ativar backup/restore do D1 e observabilidade operacional da v1.5;
-3. integrar WhatsApp/e-mail somente quando as credenciais oficiais estiverem disponíveis.
+- `docs/pages-deployment-status.json` — Pages/CRM/identidade/smoke;
+- `docs/acquisition-v13-status.json` — metas por canal e landing pages;
+- `docs/panel-identity-status.json` — identidade e lifecycle de sessão;
+- `docs/d1-continuity-status.json` — Time Travel/export/restore;
+- `.github/workflows/production-health-watch.yml` — monitor horário;
+- `.github/workflows/deploy-alerts.yml` — alertas de deploy;
+- `docs/RUNBOOK-PRODUCAO.md` — resposta a incidentes.
+
+## Pendências externas opcionais
+
+Estas integrações não bloqueiam o lançamento nem a operação atual:
+
+1. **WhatsApp Cloud API** — `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` e número oficial para notificações automáticas.
+2. **E-mail transacional** — provedor/credencial oficial para alertas e follow-ups externos.
+3. **Meta Pixel** — Pixel ID oficial da conta Meta Business.
+4. **GA4** — Measurement ID oficial da propriedade Google Analytics.
+5. **Retenção de backup superior ao Time Travel** — opcionalmente export criptografado para armazenamento privado (ex.: R2) se houver necessidade de retenção de longo prazo.
+
+## Próxima prioridade de negócio
+
+Com o produto interno estabilizado, a prioridade deixa de ser infraestrutura e passa a ser **operação comercial e geração de demanda**:
+
+1. configurar metas semanais reais no painel de Marketing;
+2. iniciar prospecção orgânica LinkedIn + conteúdo + cases;
+3. acompanhar visita → lead → reunião → proposta → ganho;
+4. revisar semanalmente ranking de campanhas e origem dos leads;
+5. integrar WhatsApp/e-mail quando as credenciais oficiais forem disponibilizadas;
+6. ativar Meta Pixel e GA4 quando os IDs oficiais forem fornecidos.
 
 ## Critério de prioridade
 
