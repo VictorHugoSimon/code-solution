@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 
 const files = [
+  'deploy/painel/index.html',
   'deploy/painel/crm/index.html',
   'deploy/painel/marketing/index.html',
   'deploy/painel/inteligencia/index.html',
