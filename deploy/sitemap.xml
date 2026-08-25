@@ -74,4 +74,8 @@
   <url><loc>https://www.codesolution.com.br/privacidade/</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/artigos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <!-- STATIC-PAGES:END -->
+  <url><loc>https://www.codesolution.com.br/cases/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/sos-truck/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/tonini/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/code-solution/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 </urlset>
