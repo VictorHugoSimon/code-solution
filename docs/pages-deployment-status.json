@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-08-25T09:49:17.597Z",
-  "sourceCommit": "a7a71a6062947bb236fe7314746ce19d4fc8e6e5",
+  "checkedAt": "2026-08-25T09:53:06.417Z",
+  "sourceCommit": "a4a8ec21776f05dcd0b76088a3d136eba214c01f",
   "build": "success",
   "personalCloudflareCredentials": "success",
   "crmAdminSecretSync": "success",
@@ -10,6 +10,7 @@
   "project": "codesolution-site",
   "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
   "attendanceUrl": "https://www.codesolution.com.br/painel/atendimento/",
+  "agendaUrl": "https://www.codesolution.com.br/painel/agenda/",
   "prospectingUrl": "https://www.codesolution.com.br/painel/prospeccao/",
   "reportsUrl": "https://www.codesolution.com.br/painel/relatorios/",
   "branding": "Code Solution",
