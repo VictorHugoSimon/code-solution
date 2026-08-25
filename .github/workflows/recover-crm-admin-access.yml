@@ -70,9 +70,13 @@ jobs:
         run: |
           set -euo pipefail
           login_http=$(curl -sS -L --retry 4 --retry-delay 3 -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          echo "LOGIN_HTTP=$login_http"
+          echo "LOGIN_BODY=$(tr '\n' ' ' </tmp/login.html | head -c 220)"
+          auth_http=$(curl -sS -o /tmp/auth.json -w '%{http_code}' -X POST https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/login -H 'content-type: application/json' --data '{"username":"admin","password":"definitely-wrong-password"}')
+          echo "AUTH_HTTP=$auth_http"
+          echo "AUTH_BODY=$(cat /tmp/auth.json | head -c 220)"
           test "$login_http" = 200
           grep -qi 'Acesso ao CRM' /tmp/login.html
-          auth_http=$(curl -sS -o /tmp/auth.json -w '%{http_code}' -X POST https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/login -H 'content-type: application/json' --data '{"username":"admin","password":"definitely-wrong-password"}')
           test "$auth_http" = 401
           grep -q 'invalid_credentials' /tmp/auth.json
           echo 'Login page and authentication route are live.'
