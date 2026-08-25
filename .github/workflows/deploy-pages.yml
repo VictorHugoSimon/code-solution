@@ -35,6 +35,7 @@ jobs:
           npm run blog:index
           npm run blog:static
           npm run pages:prepare
+          npm run check:panel-nav
           npm run check:bundled-surfaces
           node --check deploy/_worker.js
           for file in \
@@ -172,7 +173,7 @@ jobs:
             agendaUrl:'https://www.codesolution.com.br/painel/agenda/',
             prospectingUrl:'https://www.codesolution.com.br/painel/prospeccao/',
             reportsUrl:'https://www.codesolution.com.br/painel/relatorios/',
-            branding:'Code Solution',deploymentMode:'single-production-pipeline'
+            panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'
           },null,2)+'\n');
           NODE
           git config user.name 'Code Solution Pages Deploy Bot'
