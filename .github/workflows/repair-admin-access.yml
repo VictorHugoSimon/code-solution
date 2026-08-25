@@ -41,7 +41,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="INSERT OR IGNORE INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('panel-admin-primary','admin','Administrador Code Solution','admin','29339efeb77edb2f93fe6dd467c98ce766c327aa5993048bbfe5324db3fcfe5e','9f79ab6a5b532ff1c205b89e27b00fe690f51f86aca8f04c',180000,1,1,datetime('now'),datetime('now')); UPDATE panel_users SET display_name='Administrador Code Solution',role='admin',password_hash='29339efeb77edb2f93fe6dd467c98ce766c327aa5993048bbfe5324db3fcfe5e',password_salt='9f79ab6a5b532ff1c205b89e27b00fe690f51f86aca8f04c',password_iterations=180000,active=1,session_version=session_version+1,updated_at=datetime('now') WHERE username='admin'; UPDATE panel_sessions SET revoked_at=datetime('now') WHERE user_id=(SELECT id FROM panel_users WHERE username='admin') AND revoked_at IS NULL;" --yes
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="INSERT OR IGNORE INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('panel-admin-primary','admin','Administrador Code Solution','admin','76daa7a58f25f564048058423e8fdab5c04a6c35be74be06ca95fa3ac125cbe3','fb137c0aa893e9ae9ac64296fb2e1bbc98ac9b482f379e70',180000,1,1,datetime('now'),datetime('now')); UPDATE panel_users SET display_name='Administrador Code Solution',role='admin',password_hash='76daa7a58f25f564048058423e8fdab5c04a6c35be74be06ca95fa3ac125cbe3',password_salt='fb137c0aa893e9ae9ac64296fb2e1bbc98ac9b482f379e70',password_iterations=180000,active=1,session_version=session_version+1,updated_at=datetime('now') WHERE username='admin'; UPDATE panel_sessions SET revoked_at=datetime('now') WHERE user_id=(SELECT id FROM panel_users WHERE username='admin') AND revoked_at IS NULL;" --yes
 
       - name: Verify admin record
         env:
@@ -55,10 +55,10 @@ jobs:
           const raw=fs.readFileSync('/tmp/admin.json','utf8');
           for(const expected of [
             'admin',
-            '29339efeb77edb2f93fe6dd467c98ce766c327aa5993048bbfe5324db3fcfe5e',
-            '9f79ab6a5b532ff1c205b89e27b00fe690f51f86aca8f04c',
+            '76daa7a58f25f564048058423e8fdab5c04a6c35be74be06ca95fa3ac125cbe3',
+            'fb137c0aa893e9ae9ac64296fb2e1bbc98ac9b482f379e70',
             '180000'
           ]) if(!raw.includes(expected)) throw new Error(`admin verification failed: ${expected}`);
-          if(!raw.includes('"active": 1') && !raw.includes('"active":1')) throw new Error('admin is not active');
+          if(!raw.includes('\"active\": 1') && !raw.includes('\"active\":1')) throw new Error('admin is not active');
           console.log('Primary admin record restored and verified.');
           NODE
