@@ -58,7 +58,7 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');const t=fs.readFileSync('/tmp/identity-db.json','utf8');
           for(const x of ['panel_users','panel_sessions','panel_audit_log','admin']) if(!t.includes(x)) throw new Error(`missing ${x}`);
-          if(!t.includes('180000')) throw new Error('admin password hardening not found');
+          if(!t.includes('100000')) throw new Error('Cloudflare-compatible admin password hardening not found');
           NODE
 
       - name: Real identity and session lifecycle smoke
@@ -76,7 +76,7 @@ jobs:
 
           sql=$(node - <<'NODE'
           const {pbkdf2Sync,randomBytes}=require('crypto');
-          const user=process.env.USERNAME,id=process.env.USER_ID,pass=process.env.PASSWORD,salt=randomBytes(24),iterations=180000;
+          const user=process.env.USERNAME,id=process.env.USER_ID,pass=process.env.PASSWORD,salt=randomBytes(24),iterations=100000;
           const hash=pbkdf2Sync(pass,salt,iterations,32,'sha256').toString('hex');
           const esc=s=>String(s).replace(/'/g,"''");
           process.stdout.write(`INSERT INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('${esc(id)}','${esc(user)}','CI Governance','leitura_executiva','${hash}','${salt.toString('hex')}',${iterations},1,1,datetime('now'),datetime('now'));`);
@@ -148,7 +148,7 @@ jobs:
           {
             echo '## Code Solution · Panel identity'
             echo ''
-            echo '- D1 identity tables and admin seed verified.'
+            echo '- D1 identity tables and admin seed verified at 100,000 PBKDF2 iterations.'
             echo '- Ephemeral login, two-session revocation, security, password change, re-login and logout exercised.'
             echo '- Test identity is removed automatically.'
             echo '- Repository writes: disabled.'
