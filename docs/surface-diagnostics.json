@@ -1,0 +1,138 @@
+{
+  "checkedAt": "2026-08-25T16:46:46.603Z",
+  "sourceCommit": "c7d4f0f0c0b82f42a4808445c7eb09f647927694",
+  "build": "success",
+  "checks": {
+    "file:deploy/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/servicos/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/setores/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/calculadora/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/diagnostico/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/assistente/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/privacidade/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/painel/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/painel/crm/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/painel/marketing/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/painel/inteligencia/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/painel/growth/index.html": {
+      "ok": true,
+      "detail": ""
+    },
+    "file:deploy/_worker.js": {
+      "ok": true,
+      "detail": ""
+    },
+    "workerSyntax": {
+      "ok": false,
+      "detail": "/home/runner/work/code-solution/code-solution/deploy/_worker.js:39\n    const legacyTarget = legacyRedirectFor(url.pathname);\n          ^\n\nSyntaxError: Identifier 'legacyTarget' has already been declared\n    at checkSyntax (node:internal/main/check_syntax:74:5)\n\nNode.js v22.23.2\n"
+    },
+    "bundledSurfaces": {
+      "ok": true,
+      "detail": ""
+    },
+    "homeCommercial": {
+      "ok": true,
+      "detail": ""
+    },
+    "homeLead": {
+      "ok": true,
+      "detail": ""
+    },
+    "sectorsAgro": {
+      "ok": true,
+      "detail": ""
+    },
+    "calculatorTitle": {
+      "ok": true,
+      "detail": ""
+    },
+    "diagnosticTitle": {
+      "ok": true,
+      "detail": ""
+    },
+    "assistantBrand": {
+      "ok": true,
+      "detail": ""
+    },
+    "loginCopy": {
+      "ok": true,
+      "detail": ""
+    },
+    "sessionCookie": {
+      "ok": true,
+      "detail": ""
+    },
+    "panelExecutive": {
+      "ok": true,
+      "detail": ""
+    },
+    "marketingAcquisition": {
+      "ok": true,
+      "detail": ""
+    },
+    "commercialIntelligence": {
+      "ok": true,
+      "detail": ""
+    },
+    "growthEngine": {
+      "ok": true,
+      "detail": ""
+    },
+    "growthRadar": {
+      "ok": true,
+      "detail": ""
+    },
+    "crmNewLead": {
+      "ok": true,
+      "detail": ""
+    },
+    "crmOrigins": {
+      "ok": true,
+      "detail": ""
+    },
+    "privacy": {
+      "ok": true,
+      "detail": ""
+    },
+    "noLegacyCodi": {
+      "ok": true,
+      "detail": ""
+    }
+  },
+  "failures": [
+    "workerSyntax: /home/runner/work/code-solution/code-solution/deploy/_worker.js:39\n    const legacyTarget = legacyRedirectFor(url.pathname);\n          ^\n\nSyntaxError: Identifier 'legacyTarget' has already been declared\n    at checkSyntax (node:internal/main/check_syntax:74:5)\n\nNode.js v22.23.2\n"
+  ]
+}
