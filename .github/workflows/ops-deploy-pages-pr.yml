@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: ops-deploy-pages-recovery
@@ -17,6 +19,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Owner-only recovery guard
+        id: guard
         env:
           ACTOR: ${{ github.actor }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -33,6 +36,7 @@ jobs:
           node-version: 22
 
       - name: Build production bundle from main
+        id: build
         run: |
           set -euo pipefail
           npm run blog:index
@@ -47,6 +51,7 @@ jobs:
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then exit 1; fi
 
       - name: Verify production credentials and ownership
+        id: credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -59,6 +64,7 @@ jobs:
           test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
 
       - name: Sync CRM runtime secret to Pages
+        id: secret
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -68,6 +74,7 @@ jobs:
           printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
 
       - name: Deploy Pages production
+        id: pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -77,6 +84,7 @@ jobs:
           npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$MAIN_SHA" --commit-message="Code Solution CRM access recovery"
 
       - name: Validate live production
+        id: smoke
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
@@ -108,3 +116,19 @@ jobs:
           curl -sS -D "$apex_headers" -o /dev/null https://codesolution.com.br/
           test "$(head -n1 "$apex_headers" | awk '{print $2}')" = 301
           grep -i '^location:' "$apex_headers" | grep -q '^location: https://www.codesolution.com.br/'
+
+      - name: Report recovery result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          JOB_STATUS: ${{ job.status }}
+          GUARD: ${{ steps.guard.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          CREDENTIALS: ${{ steps.credentials.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
+          PAGES: ${{ steps.pages.outcome }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          body="Code Solution production recovery: job=${JOB_STATUS}; guard=${GUARD}; build=${BUILD}; credentials=${CREDENTIALS}; secret=${SECRET}; pages=${PAGES}; smoke=${SMOKE}. No secret values are included."
+          gh pr comment "$PR_NUMBER" --body "$body"
