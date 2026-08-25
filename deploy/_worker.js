@@ -4,6 +4,7 @@ const SESSION_COOKIE = 'cs_panel_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 
+
 // SEO-LEGACY-MIGRATION:START
 const LEGACY_REDIRECTS = new Map([
   ['/portfolio-category/website/','/servicos/'],
@@ -35,6 +36,7 @@ export default {
     const legacyTarget = legacyRedirectFor(url.pathname);
     if (legacyTarget) return Response.redirect(new URL(legacyTarget, url.origin).toString(), 301);
     // SEO-LEGACY-ROUTE:END
+
 
 
     if (url.pathname === '/painel/login' || url.pathname === '/painel/login/') return handleLogin(request, url);

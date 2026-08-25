@@ -51,7 +51,12 @@
   <url><loc>https://www.codesolution.com.br/blog/#bi-tempo-real</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/#legado-modernizacao</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/#ia-etica-governanca</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-<!-- STATIC-BLOG:START -->
+<url><loc>https://www.codesolution.com.br/cases/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/sos-truck/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/tonini/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.codesolution.com.br/cases/code-solution/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+
+  <!-- STATIC-BLOG:START -->
   <url><loc>https://www.codesolution.com.br/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/</loc><lastmod>2026-08-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.codesolution.com.br/en/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/</loc><lastmod>2026-08-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.codesolution.com.br/es/blog/como-a-inteligencia-artificial-pode-transformar-processos-de-pmes/</loc><lastmod>2026-08-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
@@ -74,8 +79,4 @@
   <url><loc>https://www.codesolution.com.br/privacidade/</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
   <url><loc>https://www.codesolution.com.br/blog/artigos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <!-- STATIC-PAGES:END -->
-  <url><loc>https://www.codesolution.com.br/cases/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://www.codesolution.com.br/cases/sos-truck/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://www.codesolution.com.br/cases/tonini/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://www.codesolution.com.br/cases/code-solution/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 </urlset>
