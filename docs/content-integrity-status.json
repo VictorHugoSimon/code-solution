@@ -1,12 +1,13 @@
 {
-  "checkedAt": "2026-08-25T00:57:33.246Z",
-  "sourceCommit": "f5fb0f20d31279171dff37db2016a75029268925",
+  "checkedAt": "2026-08-25T00:59:30.284Z",
+  "sourceCommit": "6edc97d5b2e20084928473c23beb41c36a1eb441",
   "workerSyntax": "success",
   "crmSchema": "success",
   "blogIndexBuild": "success",
   "staticBlogBuild": "success",
   "pagesPreparation": "success",
   "productionSurfaces": "success",
+  "growthPanelSurface": "enforced",
   "operationalPanelSurfaces": "enforced",
   "releaseOwner": "deploy-pages.yml"
 }
