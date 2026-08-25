@@ -1,0 +1,138 @@
+name: Run Code Solution Growth now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/run-growth-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-growth-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for Growth Worker deployment
+        run: |
+          set -euo pipefail
+          url=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/growth/status
+          for i in $(seq 1 18); do
+            http=$(curl -sS -o /tmp/growth-health.json -w '%{http_code}' "$url" || true)
+            if [ "$http" = 200 ] && node -e "const x=require('/tmp/growth-health.json');process.exit(x.ok===true?0:1)"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          cat /tmp/growth-health.json || true
+          exit 1
+
+      - name: Rotate one-time manual key
+        id: key
+        working-directory: robo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          KEY=$(openssl rand -hex 32)
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          printf '%s' "$KEY" | npx wrangler@4 secret put MANUAL_KEY --config wrangler.toml >/tmp/secret-put.log
+
+      - name: Run weekly planning agent
+        id: plan
+        continue-on-error: true
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          curl -fsS --retry 3 --retry-delay 4 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=plan&key=${KEY}" -o /tmp/plan.json
+          node -e "const x=require('/tmp/plan.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Run market radar agent
+        id: radar
+        continue-on-error: true
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          curl -fsS --retry 3 --retry-delay 4 --max-time 120 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=radar&key=${KEY}" -o /tmp/radar.json
+          node -e "const x=require('/tmp/radar.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Run social content agent
+        id: social
+        continue-on-error: true
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          curl -fsS --retry 3 --retry-delay 4 --max-time 120 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=social&key=${KEY}" -o /tmp/social.json
+          node -e "const x=require('/tmp/social.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Snapshot growth metrics
+        id: metrics
+        continue-on-error: true
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          curl -fsS --retry 3 --retry-delay 4 -X POST "https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/run-growth?agent=metrics&key=${KEY}" -o /tmp/metrics.json
+          node -e "const x=require('/tmp/metrics.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Read final public Growth status
+        id: status
+        if: always()
+        run: |
+          curl -fsS --retry 5 --retry-delay 3 https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/growth/status -o /tmp/final.json
+          node -e "const x=require('/tmp/final.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Persist bootstrap status
+        if: always()
+        env:
+          PLAN: ${{ steps.plan.outcome }}
+          RADAR: ${{ steps.radar.outcome }}
+          SOCIAL: ${{ steps.social.outcome }}
+          METRICS: ${{ steps.metrics.outcome }}
+          STATUS: ${{ steps.status.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=(p)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return null}};
+          const final=read('/tmp/final.json');
+          fs.writeFileSync('docs/growth-bootstrap-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            planning:e.PLAN||'skipped',radar:e.RADAR||'skipped',social:e.SOCIAL||'skipped',metrics:e.METRICS||'skipped',status:e.STATUS||'skipped',
+            growth:final
+          },null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Growth Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/growth-bootstrap-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Growth Engine bootstrap"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce bootstrap
+        if: always()
+        env:
+          PLAN: ${{ steps.plan.outcome }}
+          RADAR: ${{ steps.radar.outcome }}
+          SOCIAL: ${{ steps.social.outcome }}
+          METRICS: ${{ steps.metrics.outcome }}
+          STATUS: ${{ steps.status.outcome }}
+        run: |
+          test "$PLAN" = success
+          test "$RADAR" = success
+          test "$SOCIAL" = success
+          test "$METRICS" = success
+          test "$STATUS" = success
