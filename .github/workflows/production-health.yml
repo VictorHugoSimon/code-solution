@@ -1,0 +1,103 @@
+name: Code Solution production health
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-health.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: code-solution-production-health
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check public surfaces and runtimes
+        id: check
+        continue-on-error: true
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          HOME=https://www.codesolution.com.br
+          CONTENT=https://code-solution-robo.victorhugoteixeirasimon6.workers.dev
+          ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+
+          curl -LfsS --retry 3 --retry-delay 3 "$HOME/" >/tmp/home.html
+          grep -qi 'Code Solution' /tmp/home.html
+
+          headers=$(mktemp)
+          curl -sS --max-time 20 -D "$headers" -o /dev/null https://codesolution.com.br/
+          test "$(head -n1 "$headers" | awk '{print $2}')" = 301
+          grep -qi '^location: https://www.codesolution.com.br/' "$headers"
+
+          login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' "$HOME/painel/login/")
+          test "$login_http" = 200
+          grep -qi 'Acesso' /tmp/login.html
+
+          crm_headers=$(mktemp)
+          curl -sS -D "$crm_headers" -o /dev/null "$HOME/painel/crm/"
+          test "$(head -n1 "$crm_headers" | awk '{print $2}')" = 302
+          grep -qi '/painel/login/' "$crm_headers"
+
+          curl -fsS --retry 3 --retry-delay 2 "$CONTENT/health" >/tmp/content.json
+          curl -fsS --retry 3 --retry-delay 2 "$ATTENDANT/health" >/tmp/attendant.json
+          node - <<'NODE'
+          const c=require('/tmp/content.json'),a=require('/tmp/attendant.json');
+          if(c.ok!==true || c.ready!==true) throw new Error('content worker not ready');
+          if(a.ok!==true || a.storage!=='d1') throw new Error('attendant worker not ready on D1');
+          NODE
+
+          test -n "$CRM_ADMIN_KEY"
+          summary_http=$(curl -sS -o /tmp/summary.json -w '%{http_code}' "$ATTENDANT/crm/summary" -H "x-crm-key: $CRM_ADMIN_KEY")
+          test "$summary_http" = 200
+          node -e "const x=require('/tmp/summary.json'); if(x.ok!==true) process.exit(1)"
+
+      - name: Open or close production incident issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          set -euo pipefail
+          title='PROD HEALTH: Code Solution indisponível'
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number,title --jq ".[] | select(.title==\"$title\") | .number" | head -n1)
+          if [ "$CHECK_OUTCOME" = success ]; then
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Recuperação automática confirmada pelo monitor em $(date -u +'%Y-%m-%dT%H:%M:%SZ')."
+              gh issue close "$open" --repo "$GITHUB_REPOSITORY" --reason completed
+            fi
+          else
+            if [ -z "$open" ]; then
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "O monitor horário detectou falha em uma superfície crítica da Produção. Verifique a execução **Code Solution production health** e siga `docs/RUNBOOK-PRODUCAO.md`. Detecção UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')."
+            else
+              gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Falha ainda presente no monitor em $(date -u +'%Y-%m-%dT%H:%M:%SZ')."
+            fi
+          fi
+
+      - name: Publish health summary
+        if: always()
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          echo '## Code Solution · Production health' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Public + panel + Workers + CRM: **${CHECK_OUTCOME}**" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Frequency: hourly' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Incident channel: GitHub Issue on failure' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce health
+        if: always()
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: test "$CHECK_OUTCOME" = success
