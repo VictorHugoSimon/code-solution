@@ -1,12 +1,12 @@
 {
-  "checkedAt": "2026-08-25T01:00:47.437Z",
-  "sourceCommit": "86c311abc2ab5938f05264bc3aefcef72831068c",
+  "checkedAt": "2026-08-25T01:01:24.990Z",
+  "sourceCommit": "0248ee799ce9e59ee7a8e3abb9106527d4e01de3",
   "workerSyntax": "success",
   "crmSchema": "success",
   "blogIndexBuild": "success",
-  "staticBlogBuild": "success",
-  "pagesPreparation": "success",
-  "productionSurfaces": "success",
+  "staticBlogBuild": "cancelled",
+  "pagesPreparation": "skipped",
+  "productionSurfaces": "skipped",
   "growthPanelSurface": "enforced",
   "operationalPanelSurfaces": "enforced",
   "releaseOwner": "deploy-pages.yml"
