@@ -1,30 +1,38 @@
-name: OPS Deploy Code Solution Pages via PR
+name: OPS Deploy Code Solution Pages
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ops-deploy-pages-pr
+  group: ops-deploy-pages-recovery
   cancel-in-progress: true
 
 jobs:
   deploy:
-    if: github.actor == 'VictorHugoSimon' && github.event.pull_request.title == 'OPS: Deploy Code Solution Pages'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Owner-only recovery guard
+        env:
+          ACTOR: ${{ github.actor }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          test "$ACTOR" = 'VictorHugoSimon'
+          test "$PR_TITLE" = 'OPS: Deploy Code Solution Pages'
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Build production bundle
+      - name: Build production bundle from main
         run: |
           set -euo pipefail
           npm run blog:index
@@ -36,12 +44,9 @@ jobs:
           grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
           grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
           grep -qi 'Code Solution' deploy/assistente/index.html
-          if grep -qi '\bCodi\b' deploy/assistente/index.html; then
-            echo '::error::Legacy Codi branding found in assistant bundle'
-            exit 1
-          fi
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then exit 1; fi
 
-      - name: Verify production secrets and ownership
+      - name: Verify production credentials and ownership
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -68,10 +73,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler@4 pages deploy deploy \
-            --project-name=codesolution-site \
-            --commit-hash="${{ github.event.pull_request.head.sha }}" \
-            --commit-message="OPS CRM login production release"
+          MAIN_SHA=$(git rev-parse HEAD)
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$MAIN_SHA" --commit-message="Code Solution CRM access recovery"
 
       - name: Validate live production
         env:
@@ -93,9 +96,7 @@ jobs:
           api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
           test "$api_http" = 401
 
-          backend_http=$(curl -sS -o /tmp/backend.json -w '%{http_code}' \
-            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
-            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
+          backend_http=$(curl -sS -o /tmp/backend.json -w '%{http_code}' -H "x-crm-key: ${CRM_ADMIN_KEY}" https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
           test "$backend_http" = 200
           node -e "const x=require('/tmp/backend.json'); if(x.ok!==true) process.exit(1)"
 
@@ -103,7 +104,7 @@ jobs:
           grep -qi 'Code Solution' /tmp/assistant.html
           if grep -qi '\bCodi\b' /tmp/assistant.html; then exit 1; fi
 
-          h=$(mktemp)
-          curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
-          test "$(head -n1 "$h" | awk '{print $2}')" = 301
-          grep -i '^location:' "$h" | grep -q '^location: https://www.codesolution.com.br/'
+          apex_headers=$(mktemp)
+          curl -sS -D "$apex_headers" -o /dev/null https://codesolution.com.br/
+          test "$(head -n1 "$apex_headers" | awk '{print $2}')" = 301
+          grep -i '^location:' "$apex_headers" | grep -q '^location: https://www.codesolution.com.br/'
