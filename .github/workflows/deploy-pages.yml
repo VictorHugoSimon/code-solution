@@ -43,8 +43,9 @@ jobs:
             deploy/diagnostico/index.html deploy/assistente/index.html deploy/privacidade/index.html \
             deploy/cases/index.html deploy/cases/sos-truck/index.html deploy/cases/tonini/index.html deploy/cases/code-solution/index.html \
             deploy/painel/index.html deploy/painel/crm/index.html deploy/painel/atendimento/index.html deploy/painel/agenda/index.html \
-            deploy/painel/prospeccao/index.html deploy/painel/marketing/index.html deploy/painel/inteligencia/index.html \
-            deploy/painel/growth/index.html deploy/painel/relatorios/index.html deploy/painel/usuarios/index.html deploy/painel/conta/index.html; do
+            deploy/painel/prospeccao/index.html deploy/painel/marketing/index.html deploy/painel/marketing/acquisition.js \
+            deploy/painel/marketing/campaign-efficiency.js deploy/painel/inteligencia/index.html deploy/painel/growth/index.html \
+            deploy/painel/relatorios/index.html deploy/painel/relatorios/saude/index.html deploy/painel/usuarios/index.html deploy/painel/conta/index.html; do
             test -f "$file"
           done
           grep -q '/auth/login' deploy/_worker.js
@@ -60,6 +61,15 @@ jobs:
           grep -q '<loc>https://www.codesolution.com.br/cases/</loc>' deploy/sitemap.xml
           grep -qi 'Code Solution' deploy/assistente/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy Codi branding found'; exit 1; fi
+          grep -q 'data-cs-campaign-efficiency="1"' deploy/painel/marketing/index.html
+          grep -q 'Ranking de eficiência comercial' deploy/painel/marketing/campaign-efficiency.js
+          grep -q 'winRate\*.5' deploy/painel/marketing/campaign-efficiency.js
+          grep -q 'hotRate\*.3' deploy/painel/marketing/campaign-efficiency.js
+          grep -q 'avgScore\*.2' deploy/painel/marketing/campaign-efficiency.js
+          grep -q 'Saúde da Operação' deploy/painel/relatorios/saude/index.html
+          grep -q '/api/crm/operations/summary' deploy/painel/relatorios/saude/index.html
+          grep -q '/api/crm/acquisition/summary?days=7' deploy/painel/relatorios/saude/index.html
+          grep -q '/painel/relatorios/saude/' deploy/painel/marketing/index.html
 
       - name: Require personal Cloudflare credentials
         id: credentials
@@ -114,7 +124,7 @@ jobs:
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
 
-          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/usuarios/ /painel/conta/; do
+          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/relatorios/saude/ /painel/usuarios/ /painel/conta/; do
             h=$(mktemp); curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
             grep -i '^location:' "$h" | grep -q '/painel/login/'
@@ -155,6 +165,8 @@ jobs:
             echo '- Public smoke: `${{ steps.smoke.outcome }}`'
             echo '- CRM backend smoke: `${{ steps.backend.outcome }}`'
             echo '- CRM login: https://www.codesolution.com.br/painel/login/'
+            echo '- Health panel: https://www.codesolution.com.br/painel/relatorios/saude/'
+            echo '- Marketing ranking: https://www.codesolution.com.br/painel/marketing/'
             echo '- Personal account: https://www.codesolution.com.br/painel/conta/'
             echo '- Governance: https://www.codesolution.com.br/painel/usuarios/'
             echo '- Repository writes: disabled'
