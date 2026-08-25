@@ -44,15 +44,18 @@ jobs:
             deploy/cases/index.html deploy/cases/sos-truck/index.html deploy/cases/tonini/index.html deploy/cases/code-solution/index.html \
             deploy/painel/index.html deploy/painel/crm/index.html deploy/painel/atendimento/index.html deploy/painel/agenda/index.html \
             deploy/painel/prospeccao/index.html deploy/painel/marketing/index.html deploy/painel/inteligencia/index.html \
-            deploy/painel/growth/index.html deploy/painel/relatorios/index.html deploy/painel/usuarios/index.html; do
+            deploy/painel/growth/index.html deploy/painel/relatorios/index.html deploy/painel/usuarios/index.html deploy/painel/conta/index.html; do
             test -f "$file"
           done
           grep -q '/auth/login' deploy/_worker.js
           grep -q '/auth/session' deploy/_worker.js
           grep -q 'panelAllowed' deploy/_worker.js
+          grep -q "pathname.startsWith('/painel/conta')" deploy/_worker.js
+          grep -q 'filterPanelNavigation' deploy/_worker.js
           grep -q '/painel/usuarios/' deploy/painel/usuarios/index.html
           grep -q 'Minha segurança' deploy/painel/usuarios/index.html
-          grep -q 'Trocar minha senha' deploy/painel/usuarios/index.html
+          grep -q 'Minha Conta' deploy/painel/conta/index.html
+          grep -q 'Trocar minha senha' deploy/painel/conta/index.html
           grep -q 'case-tracking.js' deploy/cases/sos-truck/index.html
           grep -q '<loc>https://www.codesolution.com.br/cases/</loc>' deploy/sitemap.xml
           grep -qi 'Code Solution' deploy/assistente/index.html
@@ -111,7 +114,7 @@ jobs:
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
 
-          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/usuarios/; do
+          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/usuarios/ /painel/conta/; do
             h=$(mktemp); curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
             grep -i '^location:' "$h" | grep -q '/painel/login/'
@@ -152,6 +155,7 @@ jobs:
             echo '- Public smoke: `${{ steps.smoke.outcome }}`'
             echo '- CRM backend smoke: `${{ steps.backend.outcome }}`'
             echo '- CRM login: https://www.codesolution.com.br/painel/login/'
+            echo '- Personal account: https://www.codesolution.com.br/painel/conta/'
             echo '- Governance: https://www.codesolution.com.br/painel/usuarios/'
             echo '- Repository writes: disabled'
           } >> "$GITHUB_STEP_SUMMARY"
