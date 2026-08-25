@@ -4,6 +4,23 @@ const SESSION_COOKIE = 'cs_panel_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const LOGIN_USERNAME = 'admin';
 const LOGIN_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';
+// SEO-LEGACY-MIGRATION:START
+const LEGACY_REDIRECTS = new Map([
+  ['/portfolio-category/website/','/servicos/'],
+  ['/portfolio/apple-3d-design/','/servicos/'],
+  ['/portfolio/illustration-visual-design/','/servicos/'],
+  ['/a-guide-for-businesses-in-the-digital-age/','/blog/'],
+  ['/the-art-of-crafting-compelling-brand-stories/','/blog/'],
+  ['/how-analytics-can-drive-business-success/','/blog/'],
+]);
+function legacyRedirectFor(pathname) {
+  const normalized = pathname.endsWith('/') ? pathname : pathname + '/';
+  if (LEGACY_REDIRECTS.has(normalized)) return LEGACY_REDIRECTS.get(normalized);
+  if (/^\/portfolio(?:-category)?\//i.test(normalized)) return '/servicos/';
+  if (/^\/(?:author|category|tag)\//i.test(normalized)) return '/blog/';
+  return '';
+}
+// SEO-LEGACY-MIGRATION:END
 
 export default {
   async fetch(request, env) {
@@ -14,6 +31,10 @@ export default {
       url.protocol = 'https:';
       return Response.redirect(url.toString(), 301);
     }
+
+    const legacyTarget = legacyRedirectFor(url.pathname);
+    if (legacyTarget) return Response.redirect(new URL(legacyTarget, url.origin).toString(), 301);
+    // SEO-LEGACY-ROUTE:END
 
     if (url.pathname === '/painel/login' || url.pathname === '/painel/login/') {
       return handleLogin(request, env, url);
