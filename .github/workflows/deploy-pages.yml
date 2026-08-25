@@ -47,6 +47,7 @@ jobs:
             deploy/privacidade/index.html \
             deploy/painel/index.html \
             deploy/painel/crm/index.html \
+            deploy/painel/prospeccao/index.html \
             deploy/painel/marketing/index.html \
             deploy/painel/inteligencia/index.html; do
             test -f "$file"
@@ -54,6 +55,7 @@ jobs:
           grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
           grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
           grep -qi 'Code Solution' deploy/assistente/index.html
+          grep -qi 'Prospecção Orgânica' deploy/painel/prospeccao/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then
             echo '::error::Legacy Codi branding found in assistant release bundle'
             exit 1
@@ -111,10 +113,12 @@ jobs:
           grep -q 'Acesso ao CRM' /tmp/login.html
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
-          headers=$(mktemp)
-          curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
-          test "$(head -n1 "$headers" | awk '{print $2}')" = 302
-          grep -i '^location:' "$headers" | grep -q '/painel/login/'
+          for panel in /painel/ /painel/crm/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/; do
+            h=$(mktemp)
+            curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
+            test "$(head -n1 "$h" | awk '{print $2}')" = 302
+            grep -i '^location:' "$h" | grep -q '/painel/login/'
+          done
           test "$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
           apex_headers=$(mktemp)
           curl -sS -D "$apex_headers" -o /dev/null https://codesolution.com.br/
@@ -135,6 +139,7 @@ jobs:
 
       - name: Record Pages release
         if: always()
+        continue-on-error: true
         env:
           BUILD: ${{ steps.build.outcome }}
           CREDENTIALS: ${{ steps.credentials.outcome }}
@@ -144,6 +149,7 @@ jobs:
           BACKEND: ${{ steps.backend.outcome }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
+          git reset --hard HEAD
           mkdir -p docs
           node - <<'NODE'
           const fs=require('fs'),e=process.env;
@@ -153,6 +159,7 @@ jobs:
             crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',
             publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',
             project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
+            prospectingUrl:'https://www.codesolution.com.br/painel/prospeccao/',
             branding:'Code Solution',deploymentMode:'single-production-pipeline'
           },null,2)+'\n');
           NODE
