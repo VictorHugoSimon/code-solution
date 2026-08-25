@@ -9,8 +9,6 @@ on:
       - 'content/blog/**'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
-  issues:
-    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +20,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'issues' || (github.actor == 'VictorHugoSimon' && github.event.issue.title == 'OPS: deploy Code Solution Pages')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -101,39 +98,28 @@ jobs:
         id: smoke
         run: |
           set -euo pipefail
-          sleep 12
-
+          sleep 15
           for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /sitemap.xml; do
-            curl -LfsS --retry 5 --retry-delay 3 "https://www.codesolution.com.br${path}" >/tmp/page.out
+            curl -LfsS --retry 6 --retry-delay 3 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
-
           curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
           curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant.html
           grep -qi 'Code Solution' /tmp/assistant.html
           if grep -qi '\bCodi\b' /tmp/assistant.html; then exit 1; fi
-
           login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
           test "$login_http" = 200
           grep -q 'Acesso ao CRM' /tmp/login.html
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
-
           headers=$(mktemp)
           curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
-          panel_http=$(head -n1 "$headers" | awk '{print $2}')
-          panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          test "$panel_http" = 302
-          echo "$panel_location" | grep -q '/painel/login/'
-
-          api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
-          test "$api_http" = 401
-
+          test "$(head -n1 "$headers" | awk '{print $2}')" = 302
+          grep -i '^location:' "$headers" | grep -q '/painel/login/'
+          test "$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
           apex_headers=$(mktemp)
           curl -sS -D "$apex_headers" -o /dev/null https://codesolution.com.br/
-          apex_http=$(head -n1 "$apex_headers" | awk '{print $2}')
-          apex_location=$(grep -i '^location:' "$apex_headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          test "$apex_http" = 301
-          echo "$apex_location" | grep -q '^https://www.codesolution.com.br/'
+          test "$(head -n1 "$apex_headers" | awk '{print $2}')" = 301
+          grep -i '^location:' "$apex_headers" | grep -q '^location: https://www.codesolution.com.br/'
 
       - name: Validate CRM backend
         id: backend
