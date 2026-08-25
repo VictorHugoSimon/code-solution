@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: deploy-pages-production
@@ -51,6 +51,8 @@ jobs:
           grep -q '/auth/session' deploy/_worker.js
           grep -q 'panelAllowed' deploy/_worker.js
           grep -q '/painel/usuarios/' deploy/painel/usuarios/index.html
+          grep -q 'Minha segurança' deploy/painel/usuarios/index.html
+          grep -q 'Trocar minha senha' deploy/painel/usuarios/index.html
           grep -q 'case-tracking.js' deploy/cases/sos-truck/index.html
           grep -q '<loc>https://www.codesolution.com.br/cases/</loc>' deploy/sitemap.xml
           grep -qi 'Code Solution' deploy/assistente/index.html
@@ -102,18 +104,24 @@ jobs:
           curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'S.O.S Truck'
           curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Tonini'
           curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Code Solution'
+
           login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
           test "$login_http" = 200
           grep -q 'Acesso ao CRM' /tmp/login.html
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
+
           for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/usuarios/; do
             h=$(mktemp); curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
             grep -i '^location:' "$h" | grep -q '/painel/login/'
           done
+
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/auth/session)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/auth/me/security)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST https://www.codesolution.com.br/api/auth/me/password -H 'content-type: application/json' --data '{}')" = 401
+
           h=$(mktemp); curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
           test "$(head -n1 "$h" | awk '{print $2}')" = 301
           grep -i '^location:' "$h" | grep -q '^location: https://www.codesolution.com.br/'
@@ -128,30 +136,25 @@ jobs:
           test "$http" = 200
           node -e "const x=require('/tmp/summary.json');if(x.ok!==true)process.exit(1)"
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/session)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/me/security)" = 401
 
-      - name: Record Pages release
+      - name: Publish release summary
         if: always()
-        continue-on-error: true
-        env:
-          BUILD: ${{ steps.build.outcome }}
-          CREDENTIALS: ${{ steps.credentials.outcome }}
-          SECRET: ${{ steps.secret.outcome }}
-          PAGES: ${{ steps.pages.outcome }}
-          SMOKE: ${{ steps.smoke.outcome }}
-          BACKEND: ${{ steps.backend.outcome }}
-          SOURCE_SHA: ${{ github.sha }}
         run: |
-          set -euo pipefail
-          git fetch origin main; git reset --hard origin/main; mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/pages-deployment-status.json',JSON.stringify({checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,build:e.BUILD||'failure',personalCloudflareCredentials:e.CREDENTIALS||'failure',crmAdminSecretSync:e.SECRET||'failure',pagesDeploy:e.PAGES||'failure',publicSmokeTest:e.SMOKE||'failure',crmBackendSmoke:e.BACKEND||'failure',project:'codesolution-site',crmLoginUrl:'https://www.codesolution.com.br/painel/login/',usersUrl:'https://www.codesolution.com.br/painel/usuarios/',casesUrl:'https://www.codesolution.com.br/cases/',panelIdentity:'individual-revocable-d1',panelNavigation:'validated',branding:'Code Solution',deploymentMode:'single-production-pipeline'},null,2)+'\n');
-          NODE
-          git config user.name 'Code Solution Pages Deploy Bot'; git config user.email 'actions@users.noreply.github.com'
-          git add docs/pages-deployment-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'chore: record Pages deployment status'
-          git pull --rebase origin main; git push origin HEAD:main
+          {
+            echo '## Code Solution · Pages production release'
+            echo ''
+            echo '- Source: `${{ github.sha }}`'
+            echo '- Cloudflare account: personal account enforced'
+            echo '- Build: `${{ steps.build.outcome }}`'
+            echo '- Pages secret sync: `${{ steps.secret.outcome }}`'
+            echo '- Pages deploy: `${{ steps.pages.outcome }}`'
+            echo '- Public smoke: `${{ steps.smoke.outcome }}`'
+            echo '- CRM backend smoke: `${{ steps.backend.outcome }}`'
+            echo '- CRM login: https://www.codesolution.com.br/painel/login/'
+            echo '- Governance: https://www.codesolution.com.br/painel/usuarios/'
+            echo '- Repository writes: disabled'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce production release
         if: always()
