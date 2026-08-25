@@ -60,5 +60,5 @@ function labelSource(s){const map={google:'Google',linkedin:'LinkedIn',instagram
 async function load(){clearError();try{const [lr,sr]=await Promise.all([fetch(API+'/leads?limit=250',{credentials:'same-origin'}),fetch(API+'/summary',{credentials:'same-origin'})]);if(lr.status===401||sr.status===401){location.href='/painel/login/?next=/painel/marketing/';return}const ld=await lr.json(),sd=await sr.json();if(!lr.ok)throw new Error(ld.error||'Falha ao consultar leads');allLeads=ld.leads||[];summary=sr.ok?sd:null;render()}catch(e){showError('Não foi possível carregar os indicadores: '+e.message)}}
 $('period').onchange=render;$('refresh').onclick=load;load();
 </script>
-</body>
+<script src="/painel/marketing/acquisition.js" data-cs-marketing-acquisition="1"></script></body>
 </html>
