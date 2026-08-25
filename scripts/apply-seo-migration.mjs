@@ -6,7 +6,14 @@ let source=await fs.readFile(path,'utf8');
 const START='// SEO-LEGACY-MIGRATION:START';
 const END='// SEO-LEGACY-MIGRATION:END';
 source=source.replace(new RegExp(`\\n?${escapeRe(START)}[\\s\\S]*?${escapeRe(END)}\\n?`,'g'),'\n');
-source=source.replace(/\n\s*const legacyTarget = legacyRedirectFor\(url\.pathname\);[\s\S]*?\/\/ SEO-LEGACY-ROUTE:END\n?/g,'\n');
+
+// Remove every previously generated legacy route, including older builds that
+// did not persist the SEO-LEGACY-ROUTE:END marker. This keeps pages:prepare
+// idempotent and prevents duplicate `legacyTarget` declarations.
+source=source.replace(
+  /\n\s*const legacyTarget = legacyRedirectFor\(url\.pathname\);\s*\n\s*if \(legacyTarget\) return Response\.redirect\(new URL\(legacyTarget, url\.origin\)\.toString\(\), 301\);(?:\s*\n\s*\/\/ SEO-LEGACY-ROUTE:END)?/g,
+  '\n',
+);
 
 const constants=`${START}
 const LEGACY_REDIRECTS = new Map([
@@ -43,7 +50,10 @@ const route=`${canonical}
     // SEO-LEGACY-ROUTE:END`;
 source=source.replace(canonical,route);
 
+const routeCount=(source.match(/const legacyTarget = legacyRedirectFor\(url\.pathname\);/g)||[]).length;
+if(routeCount!==1) throw new Error(`Expected exactly one legacy SEO route after migration, found ${routeCount}`);
+
 await fs.writeFile(path,source,'utf8');
-console.log('Permanent legacy SEO redirects applied to Pages Worker without auth coupling.');
+console.log('Permanent legacy SEO redirects applied idempotently to Pages Worker.');
 
 function escapeRe(value){return value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
