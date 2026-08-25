@@ -166,3 +166,22 @@ CREATE TABLE IF NOT EXISTS growth_metrics (
   created_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_growth_metrics_date ON growth_metrics(metric_date);
+
+-- Privacy-safe acquisition telemetry. No names, phone numbers, email addresses,
+-- raw IPs or free-form user text are stored here.
+CREATE TABLE IF NOT EXISTS acquisition_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  event_name TEXT NOT NULL,
+  page_path TEXT,
+  source TEXT,
+  medium TEXT,
+  campaign TEXT,
+  referrer_host TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_acquisition_events_created ON acquisition_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_acquisition_events_name_created ON acquisition_events(event_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_acquisition_events_session_created ON acquisition_events(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_acquisition_events_source_created ON acquisition_events(source, created_at DESC);
