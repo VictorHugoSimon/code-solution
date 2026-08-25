@@ -1,18 +1,17 @@
 import baseWorker from './worker.js';
 import {
   getGrowthStatus,
-  runDailyGrowth,
-  runRadarAgent,
   runSocialAgent,
   runWeeklyPlanAgent,
   snapshotGrowthMetrics,
 } from './growth-engine.js';
+import { runRadarAgentRobust } from './radar-agent.js';
 
 const DAILY_CRON = '0 11 * * 1-5';
 const BLOG_CRON = '0 12 * * 2,5';
 const PLAN_CRON = '0 13 * * 1';
 const METRICS_CRON = '0 20 * * 5';
-const BUILD = 'growth-orchestrator-2026-08-24.1';
+const BUILD = 'growth-orchestrator-2026-08-24.2';
 
 export default {
   async fetch(request, env, ctx) {
@@ -32,11 +31,11 @@ export default {
       const agent = String(url.searchParams.get('agent') || 'daily').toLowerCase();
       try {
         let result;
-        if (agent === 'radar') result = await runRadarAgent(env, { trigger: 'manual' });
+        if (agent === 'radar') result = await runRadarAgentRobust(env, { trigger: 'manual' });
         else if (agent === 'social') result = await runSocialAgent(env, { trigger: 'manual' });
         else if (agent === 'plan' || agent === 'planejamento') result = await runWeeklyPlanAgent(env, { trigger: 'manual' });
         else if (agent === 'metrics') result = await snapshotGrowthMetrics(env);
-        else result = await runDailyGrowth(env, { trigger: 'manual' });
+        else result = await runDailyGrowthRobust(env, { trigger: 'manual' });
         return json({ ok: true, agent, result, build: BUILD });
       } catch (error) {
         return json({ ok: false, agent, error: cleanError(error), build: BUILD }, 500);
@@ -49,7 +48,7 @@ export default {
   async scheduled(event, env, ctx) {
     const cron = String(event?.cron || '');
     if (cron === DAILY_CRON) {
-      ctx.waitUntil(runDailyGrowth(env, { trigger: 'cron' }).catch(logError('daily growth')));
+      ctx.waitUntil(runDailyGrowthRobust(env, { trigger: 'cron' }).catch(logError('daily growth')));
       return;
     }
     if (cron === BLOG_CRON) {
@@ -63,9 +62,16 @@ export default {
       ctx.waitUntil(snapshotGrowthMetrics(env).catch(logError('metrics')));
       return;
     }
-    ctx.waitUntil(runDailyGrowth(env, { trigger: 'cron_fallback' }).catch(logError('fallback growth')));
+    ctx.waitUntil(runDailyGrowthRobust(env, { trigger: 'cron_fallback' }).catch(logError('fallback growth')));
   },
 };
+
+async function runDailyGrowthRobust(env, meta = {}) {
+  const radar = await runRadarAgentRobust(env, meta);
+  const social = await runSocialAgent(env, meta);
+  const metrics = await snapshotGrowthMetrics(env);
+  return { radar, social, metrics };
+}
 
 function logError(label) {
   return (error) => console.error(`${label} failed`, cleanError(error));
