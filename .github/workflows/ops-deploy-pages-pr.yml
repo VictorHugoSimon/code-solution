@@ -1,0 +1,109 @@
+name: OPS Deploy Code Solution Pages via PR
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-deploy-pages-pr
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.actor == 'VictorHugoSimon' && github.event.pull_request.title == 'OPS: Deploy Code Solution Pages'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build production bundle
+        run: |
+          set -euo pipefail
+          npm run blog:index
+          npm run blog:static
+          npm run pages:prepare
+          npm run check:bundled-surfaces
+          node --check deploy/_worker.js
+          test -f deploy/painel/crm/index.html
+          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
+          grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
+          grep -qi 'Code Solution' deploy/assistente/index.html
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then
+            echo '::error::Legacy Codi branding found in assistant bundle'
+            exit 1
+          fi
+
+      - name: Verify production secrets and ownership
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+
+      - name: Sync CRM runtime secret to Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+
+      - name: Deploy Pages production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 pages deploy deploy \
+            --project-name=codesolution-site \
+            --commit-hash="${{ github.event.pull_request.head.sha }}" \
+            --commit-message="OPS CRM login production release"
+
+      - name: Validate live production
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          sleep 15
+          login_http=$(curl -sS --retry 6 --retry-delay 3 -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          test "$login_http" = 200
+          grep -q 'Acesso ao CRM' /tmp/login.html
+          grep -q 'name="username"' /tmp/login.html
+          grep -q 'name="password"' /tmp/login.html
+
+          headers=$(mktemp)
+          curl -sS -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          test "$(head -n1 "$headers" | awk '{print $2}')" = 302
+          grep -i '^location:' "$headers" | grep -q '/painel/login/'
+
+          api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
+          test "$api_http" = 401
+
+          backend_http=$(curl -sS -o /tmp/backend.json -w '%{http_code}' \
+            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
+            https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
+          test "$backend_http" = 200
+          node -e "const x=require('/tmp/backend.json'); if(x.ok!==true) process.exit(1)"
+
+          curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant.html
+          grep -qi 'Code Solution' /tmp/assistant.html
+          if grep -qi '\bCodi\b' /tmp/assistant.html; then exit 1; fi
+
+          h=$(mktemp)
+          curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
+          test "$(head -n1 "$h" | awk '{print $2}')" = 301
+          grep -i '^location:' "$h" | grep -q '^location: https://www.codesolution.com.br/'
