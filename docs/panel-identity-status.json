@@ -1,12 +1,12 @@
 {
-  "checkedAt": "2026-08-25T17:52:57.638Z",
-  "sourceCommit": "dc3d115286434b85e6439006e59cb37c83e908f5",
-  "status": "failure",
-  "loginHttp": 0,
-  "sessionHttp": 0,
-  "logoutHttp": 0,
+  "checkedAt": "2026-08-25T21:33:32.775Z",
+  "sourceCommit": "395ac0e1a74cd66422d2e139de0faae24bc7f9ef",
+  "status": "success",
+  "sourceAndSchema": "success",
+  "identityLifecycle": "success",
   "ephemeralUserRemoved": true,
   "plaintextPasswordCommitted": false,
+  "pbkdf2Iterations": 100000,
   "roles": [
     "admin",
     "comercial",
