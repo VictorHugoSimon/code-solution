@@ -21,6 +21,10 @@ export async function handlePanelAuthEnhancements(request, env) {
     return securitySummary(request, env);
   }
 
+  if (url.pathname === '/auth/me/revoke-others' && request.method === 'POST') {
+    return revokeOtherSessions(request, env);
+  }
+
   return null;
 }
 
@@ -51,7 +55,11 @@ async function enforceLoginRateLimit(request, env) {
     ok: false,
     error: 'too_many_login_attempts',
     retryAfterSeconds: LOGIN_WINDOW_MINUTES * 60,
-  }, 429, { 'Retry-After': String(LOGIN_WINDOW_MINUTES * 60) });
+  }, 429, {
+    'Retry-After': String(LOGIN_WINDOW_MINUTES * 60),
+    'X-RateLimit-Limit': String(LOGIN_FAILURE_LIMIT),
+    'X-RateLimit-Remaining': '0',
+  });
 }
 
 async function changeOwnPassword(request, env) {
@@ -97,6 +105,25 @@ async function changeOwnPassword(request, env) {
   });
 
   return reply({ ok:true, reauthenticate:true, sessionsRevoked:true }, 200);
+}
+
+async function revokeOtherSessions(request, env) {
+  const session = await authenticatePanelSession(request, env);
+  if (!session) return reply({ ok:false, error:'unauthorized' }, 401);
+
+  const now = new Date().toISOString();
+  const result = await env.CRM_DB.prepare(`UPDATE panel_sessions
+    SET revoked_at=?
+    WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL AND expires_at>?`)
+    .bind(now, session.user.id, session.tokenHash, now).run();
+  const revoked = Number(result?.meta?.changes || 0);
+
+  await audit(env, session.user, 'other_sessions_revoked_self', 'panel_user', session.user.id, {
+    revoked,
+    currentSessionPreserved: true,
+  });
+
+  return reply({ ok:true, revoked, currentSessionPreserved:true }, 200);
 }
 
 async function securitySummary(request, env) {
