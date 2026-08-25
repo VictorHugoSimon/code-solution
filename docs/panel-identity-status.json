@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-08-25T17:24:42.003Z",
+  "sourceCommit": "174dc49ef3d19767eeab54cc6319e841533b07e5",
+  "status": "failure",
+  "loginHttp": 0,
+  "sessionHttp": 0,
+  "logoutHttp": 0,
+  "ephemeralUserRemoved": true,
+  "plaintextPasswordCommitted": false,
+  "roles": [
+    "admin",
+    "comercial",
+    "marketing",
+    "leitura_executiva"
+  ],
+  "sessionModel": "opaque-revocable-d1"
+}
