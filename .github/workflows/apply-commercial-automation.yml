@@ -1,0 +1,75 @@
+name: Apply CRM commercial automation schema
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crm/migrations/0003_commercial_automation.sql'
+      - '.github/workflows/apply-commercial-automation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crm-commercial-automation-schema
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require personal Cloudflare account
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
+
+      - name: Apply idempotent commercial automation migration
+        id: migration
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --file=crm/migrations/0003_commercial_automation.sql --yes
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links') ORDER BY name;" --json > /tmp/schema.json
+          node - <<'NODE'
+          const x=require('/tmp/schema.json');
+          const text=JSON.stringify(x);
+          for(const name of ['crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links']) if(!text.includes(name)) throw new Error('missing '+name);
+          NODE
+
+      - name: Persist migration status
+        if: always()
+        env:
+          OUTCOME: ${{ steps.migration.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/commercial-automation-migration-status.json',JSON.stringify({checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,migration:e.OUTCOME||'failure',database:'code-solution-crm',accountId:'cad25fe6c91871bbafb58236cf9b9b81'},null,2)+'\n');
+          NODE
+          git config user.name "Code Solution CRM Migration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/commercial-automation-migration-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record commercial automation migration status"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce migration
+        if: always()
+        env:
+          OUTCOME: ${{ steps.migration.outcome }}
+        run: test "$OUTCOME" = success
