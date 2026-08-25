@@ -1,5 +1,6 @@
 import attendantRuntime from './atendente-worker-runtime.js';
 import { handleGrowthApi } from './growth-api.js';
+import { handleCommercialApi, afterLeadCreated, beforeLeadPatch, afterLeadPatched, runCommercialAutomation } from './crm-automation.js';
 
 const EVENT_NAMES = new Set([
   'organic_landing_view',
@@ -11,6 +12,9 @@ const EVENT_NAMES = new Set([
   'blog_view',
   'blog_cta_click',
   'lead_form_start',
+  'lead_submit_success',
+  'case_view',
+  'case_cta_click',
   'scroll_50',
   'scroll_90',
   'outbound_click',
@@ -19,13 +23,70 @@ const EVENT_NAMES = new Set([
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const cors = corsHeaders(request, env);
+
     if (url.pathname.startsWith('/crm/growth')) {
-      return handleGrowthApi(request, env, corsHeaders(request, env));
+      return handleGrowthApi(request, env, cors);
     }
-    if (url.pathname === '/event') {
-      return handleAcquisitionEvent(request, env);
+
+    if (
+      url.pathname.startsWith('/crm/operations') ||
+      url.pathname.startsWith('/crm/acquisition') ||
+      url.pathname === '/crm/alerts' ||
+      /^\/crm\/alert\/[^/]+$/.test(url.pathname) ||
+      url.pathname === '/crm/tasks' ||
+      /^\/crm\/task\/[^/]+$/.test(url.pathname) ||
+      url.pathname === '/crm/owners' ||
+      /^\/crm\/owner\/[^/]+$/.test(url.pathname) ||
+      url.pathname === '/crm/automation/run'
+    ) {
+      const response = await handleCommercialApi(request, env, cors);
+      if (response) return response;
     }
+
+    if (url.pathname === '/event') return handleAcquisitionEvent(request, env);
+
+    if (url.pathname === '/lead' && request.method === 'POST') {
+      const payload = await readJson(request.clone());
+      const response = await attendantRuntime.fetch(request, env, ctx);
+      if (response.status === 201) {
+        try {
+          const data = await response.clone().json();
+          ctx?.waitUntil?.(afterLeadCreated(env, {
+            leadId: data?.leadId,
+            sessionId: payload?.sessionId,
+            source: payload?.source,
+            medium: payload?.medium,
+            campaign: payload?.campaign,
+            landingPage: payload?.landingPage,
+          }));
+        } catch (error) {
+          console.warn('Lead automation post-processing failed.', String(error?.message || error));
+        }
+      }
+      return response;
+    }
+
+    if (/^\/crm\/lead\/[^/]+$/.test(url.pathname) && request.method === 'PATCH') {
+      const leadId = decodeURIComponent(url.pathname.split('/').pop());
+      const before = await beforeLeadPatch(env, leadId).catch(() => null);
+      const response = await attendantRuntime.fetch(request, env, ctx);
+      if (response.ok && before) {
+        try {
+          const data = await response.clone().json();
+          ctx?.waitUntil?.(afterLeadPatched(env, before, data, 'painel'));
+        } catch (error) {
+          console.warn('Lead patch automation post-processing failed.', String(error?.message || error));
+        }
+      }
+      return response;
+    }
+
     return attendantRuntime.fetch(request, env, ctx);
+  },
+
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(runCommercialAutomation(env, { trigger:'scheduled_30m', notify:true }));
   },
 };
 
@@ -63,7 +124,7 @@ async function handleAcquisitionEvent(request, env) {
 
 function sanitizeMetadata(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  const allowed = ['label','target','placement','channel','article','depth'];
+  const allowed = ['label','target','placement','channel','article','depth','case'];
   const output = {};
   for (const key of allowed) {
     if (input[key] === undefined || input[key] === null) continue;
@@ -86,6 +147,10 @@ function safeHost(value) {
 
 function clean(value, max = 500) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+async function readJson(request) {
+  try { return await request.json(); } catch { return {}; }
 }
 
 function json(data, status, cors) {
