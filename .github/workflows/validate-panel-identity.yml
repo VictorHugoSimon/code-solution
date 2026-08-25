@@ -1,0 +1,117 @@
+name: Validate panel identity
+
+on:
+  workflow_run:
+    workflows: ["Deploy Cloudflare Workers"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-panel-identity-production
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ATTENDANT: https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+      EXPECTED_ACCOUNT: cad25fe6c91871bbafb58236cf9b9b81
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate identity source and schema
+        run: |
+          set -euo pipefail
+          node --check robo/panel-auth.js
+          node --check robo/atendente-auth-growth-runtime.js
+          python3 scripts/check-crm-schema.py
+
+      - name: Require personal Cloudflare account
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_ACCOUNT"
+
+      - name: Verify identity tables and primary admin seed
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('panel_users','panel_sessions','panel_audit_log') ORDER BY name; SELECT username,role,active,password_iterations FROM panel_users WHERE username='admin';" --json >/tmp/identity-db.json
+          node - <<'NODE'
+          const fs=require('fs');const t=fs.readFileSync('/tmp/identity-db.json','utf8');
+          for(const x of ['panel_users','panel_sessions','panel_audit_log','admin']) if(!t.includes(x)) throw new Error(`missing ${x}`);
+          if(!t.includes('180000')) throw new Error('admin password hardening not found');
+          NODE
+
+      - name: Real login session logout smoke with ephemeral user
+        id: smoke
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          suffix=$(node -e "process.stdout.write(crypto.randomUUID().replace(/-/g,'').slice(0,12))")
+          user="ci_${suffix}"
+          pass="Ci!${suffix}Aa9#Governance"
+          export USERNAME="$user" PASSWORD="$pass"
+          node - <<'NODE' >/tmp/seed.sql
+          const {pbkdf2Sync,randomBytes}=require('crypto');
+          const user=process.env.USERNAME, pass=process.env.PASSWORD, salt=randomBytes(24), iterations=180000;
+          const hash=pbkdf2Sync(pass,salt,iterations,32,'sha256').toString('hex');
+          const esc=s=>String(s).replace(/'/g,"''");
+          console.log(`INSERT INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('${esc('ci-'+user)}','${esc(user)}','CI Governance','leitura_executiva','${hash}','${salt.toString('hex')}',${iterations},1,1,datetime('now'),datetime('now'));`);
+          NODE
+          npx wrangler@4 d1 execute code-solution-crm --remote --file=/tmp/seed.sql --yes >/dev/null
+          cleanup(){
+            npx wrangler@4 d1 execute code-solution-crm --remote --command="DELETE FROM panel_sessions WHERE user_id='ci-${user}'; DELETE FROM panel_audit_log WHERE user_id='ci-${user}' OR username='${user}'; DELETE FROM panel_users WHERE id='ci-${user}';" --yes >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          test "$(curl -sS -o /tmp/no-session.json -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
+          login_http=$(curl -sS -o /tmp/login.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${pass}\"}")
+          test "$login_http" = 200
+          token=$(node -e "const x=require('/tmp/login.json');if(x.ok!==true||x.user?.role!=='leitura_executiva'||!x.token)process.exit(2);process.stdout.write(x.token)")
+          session_http=$(curl -sS -o /tmp/session.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")
+          test "$session_http" = 200
+          node -e "const x=require('/tmp/session.json');if(x.ok!==true||x.user?.username!==process.env.USERNAME||!x.permissions?.includes('reports')||x.permissions?.includes('crm_write'))process.exit(2)"
+          logout_http=$(curl -sS -o /tmp/logout.json -w '%{http_code}' -X POST "$ATTENDANT/auth/logout" -H "authorization: Bearer ${token}")
+          test "$logout_http" = 200
+          test "$(curl -sS -o /tmp/revoked.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")" = 401
+          echo "login_http=$login_http" >> "$GITHUB_OUTPUT"
+          echo "session_http=$session_http" >> "$GITHUB_OUTPUT"
+          echo "logout_http=$logout_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist identity validation
+        if: always()
+        env:
+          OUTCOME: ${{ steps.smoke.outcome }}
+          LOGIN_HTTP: ${{ steps.smoke.outputs.login_http }}
+          SESSION_HTTP: ${{ steps.smoke.outputs.session_http }}
+          LOGOUT_HTTP: ${{ steps.smoke.outputs.logout_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/panel-identity-status.json',JSON.stringify({checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,status:e.OUTCOME||'failure',loginHttp:Number(e.LOGIN_HTTP||0),sessionHttp:Number(e.SESSION_HTTP||0),logoutHttp:Number(e.LOGOUT_HTTP||0),ephemeralUserRemoved:true,plaintextPasswordCommitted:false,roles:['admin','comercial','marketing','leitura_executiva'],sessionModel:'opaque-revocable-d1'},null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Identity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/panel-identity-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record panel identity validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
