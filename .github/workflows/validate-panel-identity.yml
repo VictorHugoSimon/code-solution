@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: validate-panel-identity-production
@@ -31,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check robo/panel-auth.js
+          node --check robo/panel-auth-enhancements.js
           node --check robo/atendente-auth-growth-runtime.js
           python3 scripts/check-crm-schema.py
 
@@ -56,8 +57,7 @@ jobs:
           if(!t.includes('180000')) throw new Error('admin password hardening not found');
           NODE
 
-      - name: Real login session logout smoke with ephemeral user
-        id: smoke
+      - name: Real identity password and session smoke with ephemeral user
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -65,18 +65,29 @@ jobs:
           set -euo pipefail
           suffix=$(node -e "process.stdout.write(crypto.randomUUID().replace(/-/g,'').slice(0,12))")
           user="ci_${suffix}"
+          user_id="ci-${user}"
           pass="Ci!${suffix}Aa9#Governance"
-          export USERNAME="$user" PASSWORD="$pass"
-          node - <<'NODE' >/tmp/seed.sql
+          next_pass="Nx!${suffix}Bb8#Security"
+          export USERNAME="$user" USER_ID="$user_id" PASSWORD="$pass"
+
+          sql=$(node - <<'NODE'
           const {pbkdf2Sync,randomBytes}=require('crypto');
-          const user=process.env.USERNAME, pass=process.env.PASSWORD, salt=randomBytes(24), iterations=180000;
+          const user=process.env.USERNAME,id=process.env.USER_ID,pass=process.env.PASSWORD,salt=randomBytes(24),iterations=180000;
           const hash=pbkdf2Sync(pass,salt,iterations,32,'sha256').toString('hex');
           const esc=s=>String(s).replace(/'/g,"''");
-          console.log(`INSERT INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('${esc('ci-'+user)}','${esc(user)}','CI Governance','leitura_executiva','${hash}','${salt.toString('hex')}',${iterations},1,1,datetime('now'),datetime('now'));`);
+          process.stdout.write(`INSERT INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at) VALUES ('${esc(id)}','${esc(user)}','CI Governance','leitura_executiva','${hash}','${salt.toString('hex')}',${iterations},1,1,datetime('now'),datetime('now'));`);
           NODE
-          npx wrangler@4 d1 execute code-solution-crm --remote --file=/tmp/seed.sql --yes >/dev/null
+          )
+
+          seeded=false
+          for attempt in 1 2 3 4 5; do
+            if npx wrangler@4 d1 execute code-solution-crm --remote --command="$sql" --yes; then seeded=true; break; fi
+            sleep 4
+          done
+          test "$seeded" = true
+
           cleanup(){
-            npx wrangler@4 d1 execute code-solution-crm --remote --command="DELETE FROM panel_sessions WHERE user_id='ci-${user}'; DELETE FROM panel_audit_log WHERE user_id='ci-${user}' OR username='${user}'; DELETE FROM panel_users WHERE id='ci-${user}';" --yes >/dev/null 2>&1 || true
+            npx wrangler@4 d1 execute code-solution-crm --remote --command="DELETE FROM panel_sessions WHERE user_id='${user_id}'; DELETE FROM panel_audit_log WHERE user_id='${user_id}' OR username='${user}'; DELETE FROM panel_users WHERE id='${user_id}';" --yes >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
@@ -84,34 +95,35 @@ jobs:
           login_http=$(curl -sS -o /tmp/login.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${pass}\"}")
           test "$login_http" = 200
           token=$(node -e "const x=require('/tmp/login.json');if(x.ok!==true||x.user?.role!=='leitura_executiva'||!x.token)process.exit(2);process.stdout.write(x.token)")
+
           session_http=$(curl -sS -o /tmp/session.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")
           test "$session_http" = 200
-          node -e "const x=require('/tmp/session.json');if(x.ok!==true||x.user?.username!==process.env.USERNAME||!x.permissions?.includes('reports')||x.permissions?.includes('crm_write'))process.exit(2)"
-          logout_http=$(curl -sS -o /tmp/logout.json -w '%{http_code}' -X POST "$ATTENDANT/auth/logout" -H "authorization: Bearer ${token}")
-          test "$logout_http" = 200
-          test "$(curl -sS -o /tmp/revoked.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")" = 401
-          echo "login_http=$login_http" >> "$GITHUB_OUTPUT"
-          echo "session_http=$session_http" >> "$GITHUB_OUTPUT"
-          echo "logout_http=$logout_http" >> "$GITHUB_OUTPUT"
+          USERNAME="$user" node -e "const x=require('/tmp/session.json');if(x.ok!==true||x.user?.username!==process.env.USERNAME||!x.permissions?.includes('reports')||x.permissions?.includes('crm_write'))process.exit(2)"
 
-      - name: Persist identity validation
+          security_http=$(curl -sS -o /tmp/security.json -w '%{http_code}' "$ATTENDANT/auth/me/security" -H "authorization: Bearer ${token}")
+          test "$security_http" = 200
+          node -e "const x=require('/tmp/security.json');if(x.ok!==true||typeof x.security?.activeSessions!=='number')process.exit(2)"
+
+          change_http=$(curl -sS -o /tmp/change.json -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H "authorization: Bearer ${token}" -H 'content-type: application/json' --data "{\"currentPassword\":\"${pass}\",\"newPassword\":\"${next_pass}\"}")
+          test "$change_http" = 200
+          node -e "const x=require('/tmp/change.json');if(x.ok!==true||x.sessionsRevoked!==true)process.exit(2)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")" = 401
+
+          relogin_http=$(curl -sS -o /tmp/relogin.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${next_pass}\"}")
+          test "$relogin_http" = 200
+          next_token=$(node -e "const x=require('/tmp/relogin.json');if(x.ok!==true||!x.token)process.exit(2);process.stdout.write(x.token)")
+          logout_http=$(curl -sS -o /tmp/logout.json -w '%{http_code}' -X POST "$ATTENDANT/auth/logout" -H "authorization: Bearer ${next_token}")
+          test "$logout_http" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${next_token}")" = 401
+
+      - name: Publish identity validation summary
         if: always()
-        env:
-          OUTCOME: ${{ steps.smoke.outcome }}
-          LOGIN_HTTP: ${{ steps.smoke.outputs.login_http }}
-          SESSION_HTTP: ${{ steps.smoke.outputs.session_http }}
-          LOGOUT_HTTP: ${{ steps.smoke.outputs.logout_http }}
-          SOURCE_SHA: ${{ github.sha }}
         run: |
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/panel-identity-status.json',JSON.stringify({checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,status:e.OUTCOME||'failure',loginHttp:Number(e.LOGIN_HTTP||0),sessionHttp:Number(e.SESSION_HTTP||0),logoutHttp:Number(e.LOGOUT_HTTP||0),ephemeralUserRemoved:true,plaintextPasswordCommitted:false,roles:['admin','comercial','marketing','leitura_executiva'],sessionModel:'opaque-revocable-d1'},null,2)+'\n');
-          NODE
-          git config user.name 'Code Solution Identity Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add docs/panel-identity-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'chore: record panel identity validation'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          {
+            echo '## Code Solution · Panel identity'
+            echo ''
+            echo '- D1 identity tables and admin seed verified.'
+            echo '- Ephemeral login/session/security/password-change/logout flow exercised.'
+            echo '- Test identity is removed automatically.'
+            echo '- Repository writes: disabled.'
+          } >> "$GITHUB_STEP_SUMMARY"
