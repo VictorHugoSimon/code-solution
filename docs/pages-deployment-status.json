@@ -1,10 +1,39 @@
 {
-  "checkedAt": "2026-08-22T12:20:00Z",
-  "sourceCommit": "6ed50934d00c1292fca691053634cb9ebd69acf1",
+  "checkedAt": "2026-08-25T01:21:47Z",
+  "sourceCommit": "f7f3ee09d8f75279a360cbc5d34c52d2f81b2f32",
   "build": "success",
-  "cloudflareSecretsConfigured": "false",
-  "pagesDeploy": "skipped",
-  "publicSmokeTest": "skipped",
+  "personalCloudflareCredentials": "success",
+  "cloudflareAccountId": "cad25fe6c91871bbafb58236cf9b9b81",
+  "crmAdminSecretSync": "success",
+  "pagesDeploy": "success",
+  "deploymentUrl": "https://eb779906.codesolution-site.pages.dev",
   "project": "codesolution-site",
-  "note": "Build validated by content-integrity/static-blog CI. Same repository Cloudflare secrets are absent, so direct Pages deployment cannot authenticate yet."
+  "publicSmokeTest": "success",
+  "crmLogin": {
+    "url": "https://www.codesolution.com.br/painel/login/",
+    "http": 200,
+    "usernameField": true,
+    "passwordField": true,
+    "credentialHashVerified": true,
+    "sessionTtlHours": 8
+  },
+  "crmProtection": {
+    "unauthenticatedPanelHttp": 302,
+    "unauthenticatedPanelRedirectsToLogin": true,
+    "unauthenticatedApiHttp": 401,
+    "authenticatedBackendHttp": 200
+  },
+  "branding": {
+    "publicName": "Code Solution",
+    "legacyCodiPublic": false
+  },
+  "canonicalRedirect": {
+    "apexHttp": 301,
+    "target": "https://www.codesolution.com.br/"
+  },
+  "deploymentMode": "owner-only-recovery-validated",
+  "evidence": {
+    "workflowRunId": 32797184089,
+    "deployJobId": 97650824520
+  }
 }
