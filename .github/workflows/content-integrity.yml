@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: content-integrity-${{ github.ref }}
@@ -33,36 +33,21 @@ jobs:
           node-version: 22
 
       - name: Validate workers
-        id: worker_check
-        continue-on-error: true
         run: npm run check:workers
 
       - name: Validate CRM D1 schema
-        id: crm_schema
-        continue-on-error: true
         run: python3 scripts/check-crm-schema.py
 
       - name: Rebuild blog index
-        id: blog_index
-        continue-on-error: true
         run: npm run blog:index
 
       - name: Build static multilingual blog
-        id: static_blog
-        continue-on-error: true
-        if: steps.blog_index.outcome == 'success'
         run: npm run blog:static
 
       - name: Prepare Pages SEO AEO security and branding
-        id: pages_prepare
-        continue-on-error: true
-        if: steps.static_blog.outcome == 'success'
         run: npm run pages:prepare
 
       - name: Validate all production surfaces
-        id: surfaces
-        continue-on-error: true
-        if: steps.pages_prepare.outcome == 'success'
         run: |
           set -euo pipefail
           test -f deploy/index.html
@@ -77,9 +62,11 @@ jobs:
           test -f deploy/painel/marketing/index.html
           test -f deploy/painel/inteligencia/index.html
           test -f deploy/painel/growth/index.html
+          test -f deploy/painel/usuarios/index.html
           test -f deploy/_worker.js
           node --check deploy/_worker.js
           npm run check:bundled-surfaces
+          npm run check:panel-nav
           grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
           grep -q 'cs-home-lead-form' deploy/index.html
           grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
@@ -95,66 +82,19 @@ jobs:
           grep -qi 'Empresas detectadas pelo Radar' deploy/painel/growth/index.html
           grep -qi 'Novo lead' deploy/painel/crm/index.html
           grep -qi 'Todas origens' deploy/painel/crm/index.html
+          grep -qi 'Minha segurança' deploy/painel/usuarios/index.html
+          grep -qi 'Trocar minha senha' deploy/painel/usuarios/index.html
           if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy assistant branding found in public assistant'; exit 1; fi
           grep -qi 'Privacidade' deploy/privacidade/index.html
 
-      - name: Commit generated artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.surfaces.outcome == 'success'
-        run: |
-          set -euo pipefail
-          git config user.name "Code Solution Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add content/blog/index.json deploy
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: rebuild Code Solution production bundle"
-          git pull --rebase --autostash origin main
-          git push origin HEAD:main
-
-      - name: Persist validation status
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          WORKER_OUTCOME: ${{ steps.worker_check.outcome }}
-          SCHEMA_OUTCOME: ${{ steps.crm_schema.outcome }}
-          BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
-          STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
-          PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
-          SURFACES_OUTCOME: ${{ steps.surfaces.outcome }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          git reset --hard HEAD
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/content-integrity-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            workerSyntax:e.WORKER_OUTCOME,crmSchema:e.SCHEMA_OUTCOME,
-            blogIndexBuild:e.BLOG_OUTCOME,staticBlogBuild:e.STATIC_OUTCOME,
-            pagesPreparation:e.PAGES_OUTCOME,productionSurfaces:e.SURFACES_OUTCOME,
-            growthPanelSurface:'enforced',operationalPanelSurfaces:'enforced',releaseOwner:'deploy-pages.yml'
-          },null,2)+'\n');
-          NODE
-          git config user.name "Code Solution CI Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/content-integrity-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: record content integrity status"
-          git pull --rebase --autostash origin main
-          git push origin HEAD:main
-
-      - name: Enforce validation
+      - name: Publish validation summary
         if: always()
-        env:
-          WORKER_OUTCOME: ${{ steps.worker_check.outcome }}
-          SCHEMA_OUTCOME: ${{ steps.crm_schema.outcome }}
-          BLOG_OUTCOME: ${{ steps.blog_index.outcome }}
-          STATIC_OUTCOME: ${{ steps.static_blog.outcome }}
-          PAGES_OUTCOME: ${{ steps.pages_prepare.outcome }}
-          SURFACES_OUTCOME: ${{ steps.surfaces.outcome }}
         run: |
-          test "$WORKER_OUTCOME" = success
-          test "$SCHEMA_OUTCOME" = success
-          test "$BLOG_OUTCOME" = success
-          test "$STATIC_OUTCOME" = success
-          test "$PAGES_OUTCOME" = success
-          test "$SURFACES_OUTCOME" = success
+          {
+            echo '## Code Solution · Content integrity'
+            echo ''
+            echo '- Source: `${{ github.sha }}`'
+            echo '- Release owner: `deploy-pages.yml`'
+            echo '- This workflow is read-only and never commits generated files.'
+            echo '- Workers, CRM schema, Pages bundle, navigation and public branding validated in this run.'
+          } >> "$GITHUB_STEP_SUMMARY"
