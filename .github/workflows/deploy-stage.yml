@@ -22,14 +22,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build STAGE bundle
+      - name: Build isolated STAGE bundle
         run: |
+          set -euo pipefail
           npm run blog:index
           npm run blog:static
           npm run pages:prepare
           cp -R deploy stage-deploy
-          sed -i 's#https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev#https://code-solution-atendente-stage.victorhugoteixeirasimon6.workers.dev#g' stage-deploy/_worker.js stage-deploy/assistente/index.html
+          find stage-deploy -type f \( -name '*.html' -o -name '*.js' \) -exec sed -i 's#https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev#https://code-solution-atendente-stage.victorhugoteixeirasimon6.workers.dev#g' {} +
           node --check stage-deploy/_worker.js
+          if grep -R 'code-solution-atendente.victorhugoteixeirasimon6.workers.dev' stage-deploy --include='*.html' --include='*.js'; then
+            echo '::error::Production attendant reference leaked into STAGE bundle'
+            exit 1
+          fi
 
       - name: Detect required credentials
         id: creds
@@ -44,8 +49,6 @@ jobs:
           [ -z "$AI_API_KEY" ] || [ -z "$CRM_ADMIN_KEY" ] || runtime=true
           echo "cf=$cf" >> "$GITHUB_OUTPUT"
           echo "runtime=$runtime" >> "$GITHUB_OUTPUT"
-          if [ "$cf" != true ]; then echo '::warning::STAGE aguardando credenciais Cloudflare.'; fi
-          if [ "$runtime" != true ]; then echo '::warning::STAGE Worker aguardando AI_API_KEY e CRM_ADMIN_KEY nos GitHub Secrets.'; fi
 
       - name: Resolve Pages project
         id: project
@@ -54,16 +57,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
           npx wrangler@4 pages project list --json >/tmp/projects.json
           project=$(node - <<'NODE'
-          const x=require('/tmp/projects.json');const a=Array.isArray(x)?x:(x.result||x.projects||[]);
-          const n=a.map(v=>v.name||v.project_name);process.stdout.write(n.includes('codesolution-site')?'codesolution-site':n.includes('codesolution')?'codesolution':'');
+          const x=require('/tmp/projects.json');const a=Array.isArray(x)?x:(x.result||x.projects||[]);const n=a.map(v=>v.name||v.project_name);process.stdout.write(n.includes('codesolution-site')?'codesolution-site':'');
           NODE
           )
           if [ -z "$project" ]; then project=codesolution-site; npx wrangler@4 pages project create "$project" --production-branch main; fi
           echo "name=$project" >> "$GITHUB_OUTPUT"
 
-      - name: Provision isolated STAGE D1
+      - name: Provision isolated STAGE D1 and apply all migrations
         id: d1
         if: steps.creds.outputs.cf == 'true'
         working-directory: robo
@@ -86,7 +90,9 @@ jobs:
             )
           fi
           echo "id=$DB_ID" >> "$GITHUB_OUTPUT"
-          npx wrangler@4 d1 execute code-solution-crm-stage --remote --file=../crm/migrations/0001_init.sql --yes
+          for migration in ../crm/migrations/*.sql; do npx wrangler@4 d1 execute code-solution-crm-stage --remote --file="$migration" --yes; done
+          npx wrangler@4 d1 execute code-solution-crm-stage --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','panel_users','panel_sessions','panel_audit_log') ORDER BY name;" --json >/tmp/stage-schema.json
+          node -e "const t=require('fs').readFileSync('/tmp/stage-schema.json','utf8');for(const n of ['leads','panel_users','panel_sessions','panel_audit_log'])if(!t.includes(n))process.exit(2)"
 
       - name: Build isolated STAGE attendant config
         if: steps.creds.outputs.cf == 'true'
@@ -96,14 +102,16 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import os
           s=Path('wrangler-atendente.toml').read_text()
           s=s.replace('name = "code-solution-atendente"','name = "code-solution-atendente-stage"')
+          s=s.replace('ALLOWED_ORIGINS = "https://www.codesolution.com.br,https://codesolution.com.br"','ALLOWED_ORIGINS = "https://staging.codesolution-site.pages.dev"')
           lines=s.splitlines(); out=[]; skip=False
           for line in lines:
               if line.strip()=='[[kv_namespaces]]': skip=True; continue
               if skip and line.strip()=='' : skip=False; continue
               if not skip: out.append(line)
-          out += ['', '[[d1_databases]]', 'binding = "CRM_DB"', 'database_name = "code-solution-crm-stage"', f'database_id = "{__import__("os").environ["DB_ID"]}"']
+          out += ['', '[[d1_databases]]', 'binding = "CRM_DB"', 'database_name = "code-solution-crm-stage"', f'database_id = "{os.environ["DB_ID"]}"']
           Path('wrangler-atendente-stage.toml').write_text('\n'.join(out)+'\n')
           PY
 
@@ -137,7 +145,7 @@ jobs:
           PAGES_PROJECT: ${{ steps.project.outputs.name }}
         run: npx wrangler@4 pages deploy stage-deploy --project-name="$PAGES_PROJECT" --branch=staging
 
-      - name: STAGE smoke
+      - name: STAGE isolation smoke
         if: steps.creds.outputs.cf == 'true' && steps.pages.outcome == 'success' && steps.creds.outputs.runtime == 'true'
         env:
           PAGES_PROJECT: ${{ steps.project.outputs.name }}
@@ -145,9 +153,11 @@ jobs:
           set -euo pipefail
           sleep 12
           BASE="https://staging.${PAGES_PROJECT}.pages.dev"
-          curl -LfsS --retry 5 --retry-delay 3 "$BASE/setores/" | grep -qi 'Sistemas sob medida para o agronegócio'
-          curl -LfsS --retry 5 --retry-delay 3 "$BASE/calculadora/" | grep -qi 'Quanto custa construir seu sistema'
-          curl -fsS --retry 5 --retry-delay 3 https://code-solution-atendente-stage.victorhugoteixeirasimon6.workers.dev/health >/tmp/health.json
+          STAGE_ATTENDANT=https://code-solution-atendente-stage.victorhugoteixeirasimon6.workers.dev
+          curl -LfsS --retry 5 --retry-delay 3 "$BASE/cases/" | grep -q 'S.O.S Truck'
+          curl -fsS --retry 5 --retry-delay 3 "$STAGE_ATTENDANT/health" >/tmp/health.json
           node -e "const x=require('/tmp/health.json');if(x.ok!==true||x.storage!=='d1')process.exit(1)"
-          http=$(curl -sS -o /tmp/chat.json -w '%{http_code}' https://code-solution-atendente-stage.victorhugoteixeirasimon6.workers.dev/chat -H 'content-type: application/json' -H "origin: $BASE" --data '{"messages":[{"role":"user","content":"Teste de homologação: preciso automatizar um processo empresarial."}],"context":{"source":"stage_smoke","consent":true}}')
-          test "$http" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$STAGE_ATTENDANT/auth/session")" = 401
+          login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' "$BASE/painel/login/")
+          test "$login_http" = 200
+          grep -q 'Acesso ao CRM' /tmp/login.html
