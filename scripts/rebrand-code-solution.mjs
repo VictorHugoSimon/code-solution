@@ -6,6 +6,12 @@ const textExtensions = new Set(['.html', '.htm', '.js', '.json', '.xml', '.txt']
 let replacements = 0;
 let filesChanged = 0;
 
+function replacementFor(match) {
+  // Human-facing legacy brand becomes Code Solution. Lowercase standalone
+  // analytics/source values become the neutral identifier "assistente".
+  return match === match.toLowerCase() ? 'assistente' : 'Code Solution';
+}
+
 async function walk(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -16,9 +22,9 @@ async function walk(dir) {
     }
     if (!textExtensions.has(path.extname(entry.name).toLowerCase())) continue;
     const before = await fs.readFile(full, 'utf8');
-    const matches = before.match(/\bCodi\b/g) || [];
+    const matches = before.match(/\bcodi\b/gi) || [];
     if (!matches.length) continue;
-    const after = before.replace(/\bCodi\b/g, 'Code Solution');
+    const after = before.replace(/\bcodi\b/gi, replacementFor);
     await fs.writeFile(full, after);
     replacements += matches.length;
     filesChanged += 1;
@@ -38,13 +44,13 @@ async function verify(dir) {
     }
     if (!textExtensions.has(path.extname(entry.name).toLowerCase())) continue;
     const text = await fs.readFile(full, 'utf8');
-    if (/\bCodi\b/.test(text)) leftovers.push(path.relative(process.cwd(), full));
+    if (/\bcodi\b/i.test(text)) leftovers.push(path.relative(process.cwd(), full));
   }
 }
 await verify(root);
 
 if (leftovers.length) {
-  throw new Error(`Branding legado Codi ainda encontrado em: ${leftovers.join(', ')}`);
+  throw new Error(`Branding legado ainda encontrado em: ${leftovers.join(', ')}`);
 }
 
 console.log(`Branding Code Solution aplicado: ${replacements} substituições em ${filesChanged} arquivo(s).`);
