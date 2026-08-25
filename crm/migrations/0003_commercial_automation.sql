@@ -51,7 +51,17 @@ CREATE INDEX IF NOT EXISTS idx_crm_automation_runs_started ON crm_automation_run
 -- each lead has at most one active "next action" task that can be safely updated.
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_owner_status_due ON crm_tasks(owner,status,due_at);
 
--- Anonymous acquisition session used to connect visit -> lead without storing
--- additional personal data. ALTER is intentionally isolated in this migration.
-ALTER TABLE leads ADD COLUMN anonymous_session_id TEXT;
-CREATE INDEX IF NOT EXISTS idx_leads_anonymous_session ON leads(anonymous_session_id);
+-- Privacy-safe link between anonymous acquisition session and CRM lead.
+-- It lets the Growth dashboard measure visit -> lead without adding more PII to leads.
+CREATE TABLE IF NOT EXISTS lead_acquisition_links (
+  lead_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  source TEXT,
+  medium TEXT,
+  campaign TEXT,
+  landing_page TEXT,
+  linked_at TEXT NOT NULL,
+  FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_lead_acquisition_session ON lead_acquisition_links(session_id);
+CREATE INDEX IF NOT EXISTS idx_lead_acquisition_source ON lead_acquisition_links(source,campaign,linked_at DESC);
