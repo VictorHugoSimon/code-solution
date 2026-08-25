@@ -4,6 +4,10 @@ on:
   workflow_run:
     workflows: ["Deploy Cloudflare Workers"]
     types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-panel-identity.yml'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +19,7 @@ concurrency:
 
 jobs:
   validate:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -57,7 +61,7 @@ jobs:
           if(!t.includes('180000')) throw new Error('admin password hardening not found');
           NODE
 
-      - name: Real identity password and session smoke with ephemeral user
+      - name: Real identity and session lifecycle smoke
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -81,8 +85,8 @@ jobs:
 
           seeded=false
           for attempt in 1 2 3 4 5; do
-            if npx wrangler@4 d1 execute code-solution-crm --remote --command="$sql" --yes; then seeded=true; break; fi
-            sleep 4
+            if npx wrangler@4 d1 execute code-solution-crm --remote --command="$sql" --yes >/tmp/seed.log 2>&1; then seeded=true; break; fi
+            sleep 3
           done
           test "$seeded" = true
 
@@ -91,30 +95,52 @@ jobs:
           }
           trap cleanup EXIT
 
-          test "$(curl -sS -o /tmp/no-session.json -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
-          login_http=$(curl -sS -o /tmp/login.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${pass}\"}")
-          test "$login_http" = 200
-          token=$(node -e "const x=require('/tmp/login.json');if(x.ok!==true||x.user?.role!=='leitura_executiva'||!x.token)process.exit(2);process.stdout.write(x.token)")
+          expect_http(){
+            label="$1" expected="$2" actual="$3"
+            echo "$label HTTP=$actual expected=$expected"
+            test "$actual" = "$expected"
+          }
 
-          session_http=$(curl -sS -o /tmp/session.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")
-          test "$session_http" = 200
-          USERNAME="$user" node -e "const x=require('/tmp/session.json');if(x.ok!==true||x.user?.username!==process.env.USERNAME||!x.permissions?.includes('reports')||x.permissions?.includes('crm_write'))process.exit(2)"
+          anonymous=$(curl -sS -o /tmp/no-session.json -w '%{http_code}' "$ATTENDANT/auth/session")
+          expect_http anonymous_session 401 "$anonymous"
 
-          security_http=$(curl -sS -o /tmp/security.json -w '%{http_code}' "$ATTENDANT/auth/me/security" -H "authorization: Bearer ${token}")
-          test "$security_http" = 200
-          node -e "const x=require('/tmp/security.json');if(x.ok!==true||typeof x.security?.activeSessions!=='number')process.exit(2)"
+          login1=$(curl -sS -o /tmp/login1.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${pass}\"}")
+          expect_http login_1 200 "$login1"
+          token1=$(node -e "const x=require('/tmp/login1.json');if(x.ok!==true||x.user?.role!=='leitura_executiva'||!x.token)process.exit(2);process.stdout.write(x.token)")
 
-          change_http=$(curl -sS -o /tmp/change.json -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H "authorization: Bearer ${token}" -H 'content-type: application/json' --data "{\"currentPassword\":\"${pass}\",\"newPassword\":\"${next_pass}\"}")
-          test "$change_http" = 200
+          session1=$(curl -sS -o /tmp/session1.json -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token1}")
+          expect_http session_1 200 "$session1"
+          USERNAME="$user" node -e "const x=require('/tmp/session1.json');if(x.ok!==true||x.user?.username!==process.env.USERNAME||!x.permissions?.includes('reports')||x.permissions?.includes('crm_write'))process.exit(2)"
+
+          security1=$(curl -sS -o /tmp/security1.json -w '%{http_code}' "$ATTENDANT/auth/me/security" -H "authorization: Bearer ${token1}")
+          expect_http security_1 200 "$security1"
+          node -e "const x=require('/tmp/security1.json');if(x.ok!==true||typeof x.security?.activeSessions!=='number')process.exit(2)"
+
+          login2=$(curl -sS -o /tmp/login2.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${pass}\"}")
+          expect_http login_2 200 "$login2"
+          token2=$(node -e "const x=require('/tmp/login2.json');if(x.ok!==true||!x.token)process.exit(2);process.stdout.write(x.token)")
+
+          revoke=$(curl -sS -o /tmp/revoke.json -w '%{http_code}' -X POST "$ATTENDANT/auth/me/revoke-others" -H "authorization: Bearer ${token1}" -H 'content-type: application/json' --data '{}')
+          expect_http revoke_others 200 "$revoke"
+          node -e "const x=require('/tmp/revoke.json');if(x.ok!==true||x.currentSessionPreserved!==true||x.revoked<1)process.exit(2)"
+          token1_after=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token1}")
+          expect_http preserved_current_session 200 "$token1_after"
+          token2_after=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token2}")
+          expect_http revoked_other_session 401 "$token2_after"
+
+          change=$(curl -sS -o /tmp/change.json -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H "authorization: Bearer ${token1}" -H 'content-type: application/json' --data "{\"currentPassword\":\"${pass}\",\"newPassword\":\"${next_pass}\"}")
+          expect_http password_change 200 "$change"
           node -e "const x=require('/tmp/change.json');if(x.ok!==true||x.sessionsRevoked!==true)process.exit(2)"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token}")" = 401
+          old_token=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${token1}")
+          expect_http old_session_revoked_after_password 401 "$old_token"
 
-          relogin_http=$(curl -sS -o /tmp/relogin.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${next_pass}\"}")
-          test "$relogin_http" = 200
+          relogin=$(curl -sS -o /tmp/relogin.json -w '%{http_code}' "$ATTENDANT/auth/login" -H 'content-type: application/json' --data "{\"username\":\"${user}\",\"password\":\"${next_pass}\"}")
+          expect_http relogin 200 "$relogin"
           next_token=$(node -e "const x=require('/tmp/relogin.json');if(x.ok!==true||!x.token)process.exit(2);process.stdout.write(x.token)")
-          logout_http=$(curl -sS -o /tmp/logout.json -w '%{http_code}' -X POST "$ATTENDANT/auth/logout" -H "authorization: Bearer ${next_token}")
-          test "$logout_http" = 200
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${next_token}")" = 401
+          logout=$(curl -sS -o /tmp/logout.json -w '%{http_code}' -X POST "$ATTENDANT/auth/logout" -H "authorization: Bearer ${next_token}")
+          expect_http logout 200 "$logout"
+          logged_out=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session" -H "authorization: Bearer ${next_token}")
+          expect_http logged_out_session 401 "$logged_out"
 
       - name: Publish identity validation summary
         if: always()
@@ -123,7 +149,7 @@ jobs:
             echo '## Code Solution · Panel identity'
             echo ''
             echo '- D1 identity tables and admin seed verified.'
-            echo '- Ephemeral login/session/security/password-change/logout flow exercised.'
+            echo '- Ephemeral login, two-session revocation, security, password change, re-login and logout exercised.'
             echo '- Test identity is removed automatically.'
             echo '- Repository writes: disabled.'
           } >> "$GITHUB_STEP_SUMMARY"
