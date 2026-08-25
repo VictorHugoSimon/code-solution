@@ -16,11 +16,10 @@ export default {
       const auth = await handlePanelAuth(request, env);
       if (auth) return auth;
     } catch (error) {
-      const detail = String(error?.message || error || 'unknown_error').replace(/[\r\n\t]/g, ' ').slice(0, 300);
-      console.error('Core panel authentication failed.', detail);
+      console.error('Core panel authentication failed.', String(error?.message || error || 'unknown_error').replace(/[\r\n\t]/g, ' ').slice(0, 500));
       const url = new URL(request.url);
       if (url.pathname.startsWith('/auth/')) {
-        return new Response(JSON.stringify({ ok:false, error:'panel_auth_exception', detail }), {
+        return new Response(JSON.stringify({ ok:false, error:'auth_unavailable' }), {
           status: 500,
           headers: {
             'content-type':'application/json; charset=utf-8',
