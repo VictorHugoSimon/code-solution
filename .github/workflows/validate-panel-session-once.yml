@@ -1,0 +1,69 @@
+name: Validate authenticated panel session once
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-panel-session-once.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build signed session cookie without exposing secret
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          node - <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const secret=process.env.CRM_ADMIN_KEY;
+          const payload=JSON.stringify({exp:Math.floor(Date.now()/1000)+(60*60),v:1});
+          const b64=Buffer.from(payload).toString('base64url');
+          const sig=crypto.createHmac('sha256',secret).update(b64).digest('base64url');
+          fs.writeFileSync('/tmp/cs-session',`${b64}.${sig}`,{mode:0o600});
+          NODE
+
+      - name: Validate authenticated panel CRM marketing intelligence and API
+        id: live
+        run: |
+          set -euo pipefail
+          token=$(cat /tmp/cs-session)
+          crm=$(curl -sS --retry 4 --retry-delay 2 -o /tmp/crm.html -w '%{http_code}' -H "Cookie: cs_panel_session=${token}" https://www.codesolution.com.br/painel/crm/)
+          marketing=$(curl -sS --retry 4 --retry-delay 2 -o /tmp/marketing.html -w '%{http_code}' -H "Cookie: cs_panel_session=${token}" https://www.codesolution.com.br/painel/marketing/)
+          intelligence=$(curl -sS --retry 4 --retry-delay 2 -o /tmp/intelligence.html -w '%{http_code}' -H "Cookie: cs_panel_session=${token}" https://www.codesolution.com.br/painel/inteligencia/)
+          api=$(curl -sS --retry 4 --retry-delay 2 -o /tmp/summary.json -w '%{http_code}' -H "Cookie: cs_panel_session=${token}" https://www.codesolution.com.br/api/crm/summary)
+          test "$crm" = 200
+          test "$marketing" = 200
+          test "$intelligence" = 200
+          test "$api" = 200
+          grep -qi 'CRM' /tmp/crm.html
+          grep -qi 'Marketing' /tmp/marketing.html
+          grep -qi 'Intelig' /tmp/intelligence.html
+          node -e "const x=require('/tmp/summary.json');if(x.ok!==true)process.exit(1)"
+          echo "crm=$crm" >> "$GITHUB_OUTPUT"
+          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
+          echo "intelligence=$intelligence" >> "$GITHUB_OUTPUT"
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+
+      - name: Record authenticated panel validation
+        env:
+          CRM: ${{ steps.live.outputs.crm }}
+          MARKETING: ${{ steps.live.outputs.marketing }}
+          INTELLIGENCE: ${{ steps.live.outputs.intelligence }}
+          API: ${{ steps.live.outputs.api }}
+        run: |
+          mkdir -p docs
+          printf '{"checkedAt":"%s","status":"success","crmHttp":%s,"marketingHttp":%s,"intelligenceHttp":%s,"crmApiHttp":%s,"secretExposed":false}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$CRM" "$MARKETING" "$INTELLIGENCE" "$API" > docs/authenticated-panel-validation.json
+          git config user.name 'Code Solution Panel Validation Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/authenticated-panel-validation.json
+          git commit -m 'chore: record authenticated panel validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
