@@ -19,11 +19,13 @@ Plataforma comercial disponível:
 - Assistente Code Solution;
 - captura de leads integrada ao D1/CRM;
 - Workers AI;
-- deploy automático GitHub → Cloudflare Pages/Workers.
+- deploy automático GitHub → Cloudflare Pages/Workers;
+- identidades individuais e revogáveis no painel;
+- automação comercial agendada a cada 30 minutos.
 
 ## v1.1 — Operação comercial assistida
 
-Status: implementada / em publicação contínua.
+Status: **concluída e em produção**.
 
 - [x] login administrativo e sessão segura;
 - [x] CRM com pipeline e lead score;
@@ -39,15 +41,18 @@ Status: implementada / em publicação contínua.
 
 ## v1.2 — Automação do lead até reunião
 
-Prioridade: alta.
+Status: **núcleo interno concluído e ativo em produção**.
 
-1. Notificação de novo lead para responsável comercial.
-2. SLA automático: alerta para lead novo sem contato em 4h.
-3. Lembrete de follow-up vencido.
-4. Geração de tarefa/agenda a partir da próxima ação do CRM.
-5. Modelo de distribuição de leads por responsável.
-6. Histórico de alterações de owner e SLA.
-7. Dashboard de velocidade comercial: tempo até primeiro contato, discovery e proposta.
+- [x] SLA automático e alerta de lead novo sem contato;
+- [x] alerta de follow-up vencido;
+- [x] alerta de próxima ação ausente;
+- [x] alerta de lead quente aguardando atendimento;
+- [x] geração de tarefas a partir da próxima ação do CRM;
+- [x] distribuição automática de leads por responsável;
+- [x] histórico de alteração de owner e eventos de SLA;
+- [x] dashboard de velocidade comercial: primeiro contato, discovery, proposta e ganho;
+- [x] execução automática do motor comercial a cada 30 minutos;
+- [ ] notificação externa de novos alertas via WhatsApp Cloud API ou e-mail transacional.
 
 Dependências externas opcionais:
 - WhatsApp Cloud API para mensagens/notificações automáticas;
@@ -55,27 +60,30 @@ Dependências externas opcionais:
 
 ## v1.3 — Growth e aquisição mensurável
 
-Prioridade: alta.
+Status: **em produção / consolidação final**.
 
-1. Consolidar UTMs e origem em todos os formulários.
-2. Acompanhar visita → lead → oportunidade → ganho.
-3. Metas semanais por canal orgânico.
-4. Conteúdo ligado a ICP/segmento e dor comercial.
-5. Dashboard de conversão por landing page e campanha.
-6. Medir conteúdo publicado → lead influenciado.
-7. Ativar Meta Pixel somente com Pixel ID oficial.
-8. Manter GA4/UTMs sem identificadores fictícios.
+- [x] UTMs e origem persistidas nos eventos e leads vinculados;
+- [x] funil visita → engajamento → formulário → lead → ganho;
+- [x] dashboard por origem e campanha;
+- [x] conteúdo publicado → lead influenciado;
+- [x] tracking de CTA, WhatsApp, assistente, diagnóstico, calculadora, blog e cases;
+- [ ] metas semanais por canal orgânico;
+- [ ] dashboard explícito de conversão por landing page;
+- [ ] ranking de campanhas por eficiência comercial;
+- [ ] Meta Pixel, somente após Pixel ID oficial;
+- [ ] GA4, somente após Measurement ID oficial.
 
 ## v1.4 — Usuários e governança
 
-Prioridade: média.
+Status: **concluída em produção**.
 
-1. Usuários individuais em vez de uma credencial administrativa compartilhada.
-2. Perfis: Administrador, Comercial, Marketing e Leitura Executiva.
-3. Auditoria de login e alterações críticas.
-4. Revogação de sessões.
-5. Política de senha e recuperação de acesso.
-6. Separação entre STAGE e Produção para mudanças de maior risco.
+- [x] usuários individuais em vez de credencial administrativa compartilhada;
+- [x] perfis Administrador, Comercial, Marketing e Leitura Executiva;
+- [x] auditoria de login e alterações críticas;
+- [x] sessões individuais revogáveis;
+- [x] autenticação PBKDF2-SHA256 com senha não armazenada em texto;
+- [x] tela de gestão de usuários em `/painel/usuarios/`;
+- [x] STAGE com dados de identidade isolados da Produção.
 
 ## v1.5 — Observabilidade e continuidade
 
@@ -88,6 +96,12 @@ Prioridade: média.
 5. Teste de restauração do CRM.
 6. Painel técnico de saúde da operação.
 7. Runbook de incidente e rollback.
+
+## Próxima execução recomendada
+
+1. concluir v1.3 com metas semanais por canal e conversão por landing page;
+2. depois ativar backup/restore do D1 e observabilidade operacional da v1.5;
+3. integrar WhatsApp/e-mail somente quando as credenciais oficiais estiverem disponíveis.
 
 ## Critério de prioridade
 
