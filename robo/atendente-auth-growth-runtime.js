@@ -4,7 +4,12 @@ import { handlePanelAuthEnhancements } from './panel-auth-enhancements.js';
 
 export default {
   async fetch(request, env, ctx) {
-    const enhancedAuth = await handlePanelAuthEnhancements(request, env);
+    let enhancedAuth = null;
+    try {
+      enhancedAuth = await handlePanelAuthEnhancements(request, env);
+    } catch (error) {
+      console.error('Panel auth enhancement failed; continuing with core authentication.', String(error?.message || error).slice(0, 500));
+    }
     if (enhancedAuth) return enhancedAuth;
 
     const auth = await handlePanelAuth(request, env);
