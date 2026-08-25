@@ -9,6 +9,8 @@ on:
       - 'content/blog/**'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
+  issues:
+    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +22,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name != 'issues' || (github.actor == 'VictorHugoSimon' && github.event.issue.title == 'OPS: deploy Code Solution Pages')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
