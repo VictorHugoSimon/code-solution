@@ -23,6 +23,7 @@ const links = [
 ];
 
 function currentModule(file) {
+  if (file.endsWith('/painel/index.html')) return 'visao';
   if (file.includes('/crm/')) return 'crm';
   if (file.includes('/atendimento/')) return 'atendimento';
   if (file.includes('/agenda/')) return 'agenda';
@@ -33,33 +34,33 @@ function currentModule(file) {
   return 'visao';
 }
 
+function normalHeader(module) {
+  const anchors = links.map(([href, label, key]) => {
+    const active = module === key ? ' class="active"' : '';
+    return `<a${active} href="${href}">${label}</a>`;
+  }).join('');
+  return `<header class="top"><nav class="nav"><div class="brand">CODE <b>SOLUTION</b> · PAINEL</div>${anchors}<a href="/painel/logout/">Sair</a></nav></header>`;
+}
+
+function crmHeader() {
+  const anchors = links.map(([href, label, key]) => {
+    const active = key === 'crm' ? ' active' : '';
+    return `<a class="navlink${active}" href="${href}">${label}</a>`;
+  }).join('');
+  return `<header class="top"><div class="row"><div class="brand">CODE <b>SOLUTION</b> · CRM</div><div class="navmini">${anchors}<a class="navlink" href="/painel/logout/">Sair</a></div><button id="newLead" class="btn primary">+ Novo lead</button></div></header>`;
+}
+
 for (const file of files) {
   let html = await fs.readFile(file, 'utf8');
-  const before = html;
+  const start = html.indexOf('<header class="top">');
+  const end = start >= 0 ? html.indexOf('</header>', start) : -1;
+  if (start < 0 || end < 0) throw new Error(`Panel header not found: ${file}`);
 
-  const navStart = html.indexOf('<header class="top">');
-  const navEnd = navStart >= 0 ? html.indexOf('</header>', navStart) : -1;
-  if (navStart < 0 || navEnd < 0) continue;
-
-  let header = html.slice(navStart, navEnd + '</header>'.length);
   const module = currentModule(file);
-  const isCrm = module === 'crm';
-  const cls = isCrm ? 'navlink' : '';
-
-  for (const [href, label, key] of links) {
-    if (header.includes(`href="${href}"`)) continue;
-    const className = [cls, module === key ? 'active' : ''].filter(Boolean).join(' ');
-    const anchor = `<a${className ? ` class="${className}"` : ''} href="${href}">${label}</a>`;
-
-    const crmLogoutPos = header.indexOf('<a class="navlink" href="/painel/logout/"');
-    const logoutPos = header.indexOf('<a href="/painel/logout/"');
-    const pos = crmLogoutPos >= 0 ? crmLogoutPos : logoutPos;
-    if (pos >= 0) header = header.slice(0, pos) + anchor + header.slice(pos);
-  }
-
-  html = html.slice(0, navStart) + header + html.slice(navEnd + '</header>'.length);
-  if (html !== before) {
-    await fs.writeFile(file, html);
-    console.log(`Panel navigation normalized: ${file}`);
+  const header = module === 'crm' ? crmHeader() : normalHeader(module);
+  const next = html.slice(0, start) + header + html.slice(end + '</header>'.length);
+  if (next !== html) {
+    await fs.writeFile(file, next);
+    console.log(`Panel navigation rebuilt: ${file}`);
   }
 }
