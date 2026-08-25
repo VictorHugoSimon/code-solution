@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: deploy-workers-production
@@ -47,9 +47,12 @@ jobs:
         run: |
           set -euo pipefail
           node --check robo/worker.js
+          node --check robo/panel-auth.js
+          node --check robo/panel-auth-enhancements.js
           node --check robo/atendente-worker.js
           node --check robo/atendente-worker-runtime.js
           node --check robo/atendente-growth-runtime.js
+          node --check robo/atendente-auth-growth-runtime.js
           node --check robo/growth-api.js
           node --check robo/crm-automation.js
 
@@ -91,11 +94,11 @@ jobs:
             npx wrangler@4 d1 execute code-solution-crm --remote --file="$migration" --yes
           done
 
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts') ORDER BY name;" --json > /tmp/schema-check.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log') ORDER BY name;" --json > /tmp/schema-check.json
           node - <<'NODE'
           const fs=require('fs');
           const text=fs.readFileSync('/tmp/schema-check.json','utf8');
-          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts']) {
+          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log']) {
             if(!text.includes(name)) throw new Error(`missing table ${name}`);
           }
           NODE
@@ -158,9 +161,8 @@ jobs:
           [ -z "$WHATSAPP_PHONE_ID" ] || printf '%s' "$WHATSAPP_PHONE_ID" | npx wrangler@4 secret put WHATSAPP_PHONE_ID --config "$cfg"
           [ -z "$OWNER_WHATSAPP" ] || printf '%s' "$OWNER_WHATSAPP" | npx wrangler@4 secret put OWNER_WHATSAPP --config "$cfg"
 
-      - name: Real production smoke for Workers CRM automation and acquisition
+      - name: Real production smoke for Workers CRM automation acquisition and panel security
         id: smoke
-        continue-on-error: true
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
         run: |
@@ -177,10 +179,7 @@ jobs:
           if(a.ok!==true || a.service!=='code-solution-atendente' || a.storage!=='d1') throw new Error('attendant worker not on D1');
           NODE
 
-          chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" \
-            -H 'content-type: application/json' \
-            -H 'origin: https://www.codesolution.com.br' \
-            --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"deploy_smoke","consent":true}}')
+          chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"deploy_smoke","consent":true}}')
           test "$chat_http" = 200
           node - <<'NODE'
           const x=require('/tmp/chat.json');
@@ -188,18 +187,17 @@ jobs:
           if(/\bCodi\b/i.test(x.message)) throw new Error('legacy assistant branding returned');
           NODE
 
-          lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" \
-            -H 'content-type: application/json' \
-            -H 'origin: https://www.codesolution.com.br' \
-            --data '{"name":"","whatsapp":"","need":""}')
+          lead_http=$(curl -sS --max-time 20 -o /tmp/lead.json -w '%{http_code}' "$ATTENDANT/lead" -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"name":"","whatsapp":"","need":""}')
           test "$lead_http" = 400
           node - <<'NODE'
           const x=require('/tmp/lead.json');
           if(x.ok!==false || x.error!=='validation_error') throw new Error('lead validation contract invalid');
           NODE
 
-          unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")
-          test "$unauth" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/me/security")" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H 'content-type: application/json' --data '{}')" = 401
 
           for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary; do
             file=$(echo "$route" | tr '/?' '__')
@@ -212,46 +210,27 @@ jobs:
           NODE
           done
 
-          auto_http=$(curl -sS --max-time 40 -o /tmp/automation.json -w '%{http_code}' "$ATTENDANT/crm/automation/run" \
-            -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
+          auto_http=$(curl -sS --max-time 40 -o /tmp/automation.json -w '%{http_code}' "$ATTENDANT/crm/automation/run" -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
           test "$auto_http" = 200
           node - <<'NODE'
           const x=require('/tmp/automation.json');
           if(x.ok!==true || typeof x.leadsScanned!=='number') throw new Error('commercial automation run invalid');
           NODE
 
-      - name: Persist Worker release status
+      - name: Publish release summary
         if: always()
-        env:
-          CONFIGURED: ${{ steps.cf.outputs.configured }}
-          D1_OUTCOME: ${{ steps.d1.outcome }}
-          D1_ID: ${{ steps.d1.outputs.database_id }}
-          CONTENT_OUTCOME: ${{ steps.content.outcome }}
-          ATTENDANT_OUTCOME: ${{ steps.attendant.outcome }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          SOURCE_SHA: ${{ github.sha }}
         run: |
-          mkdir -p docs
-          node - <<'NODE'
-          const fs=require('fs'),e=process.env;
-          fs.writeFileSync('docs/deployment-status.json',JSON.stringify({
-            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
-            cloudflareSecretsConfigured:e.CONFIGURED||'false',personalCloudflareAccount:true,
-            crmD1Provision:e.D1_OUTCOME||'skipped',crmD1DatabaseId:e.D1_ID||'',allMigrationsApplied:e.D1_OUTCOME||'skipped',
-            contentWorkerDeploy:e.CONTENT_OUTCOME||'skipped',attendantWorkerDeploy:e.ATTENDANT_OUTCOME||'skipped',
-            productionSmoke:e.SMOKE_OUTCOME||'skipped',crmAutomationSmoke:e.SMOKE_OUTCOME||'skipped',acquisitionSmoke:e.SMOKE_OUTCOME||'skipped',
-            commercialAutomationCron:'*/30 * * * *',branding:'Code Solution',
-            contentWorkerUrl:'https://code-solution-robo.victorhugoteixeirasimon6.workers.dev',
-            attendantWorkerUrl:'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
-          },null,2)+'\n');
-          NODE
-          git config user.name "Code Solution Deploy Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/deployment-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "chore: record hardened Worker release status"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          {
+            echo '## Code Solution · Workers production release'
+            echo ''
+            echo '- Source: `${{ github.sha }}`'
+            echo '- Cloudflare account: personal account enforced'
+            echo '- D1 migrations: `${{ steps.d1.outcome }}`'
+            echo '- Content Worker: `${{ steps.content.outcome }}`'
+            echo '- Attendant Worker: `${{ steps.attendant.outcome }}`'
+            echo '- Production smoke: `${{ steps.smoke.outcome }}`'
+            echo '- Repository writes: disabled'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce production release
         if: always()
