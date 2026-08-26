@@ -1,7 +1,7 @@
 import baseRuntime from './atendente-auth-growth-runtime.js';
 import { AUTONOMY_AGENTS, handleAutonomyApi, runAutonomousOrchestrator } from './autonomous-os.js';
 
-const AUTONOMY_BUILD = 'autonomous-os-2026-08-25.1';
+const AUTONOMY_BUILD = 'autonomous-os-2026-08-26.1';
 
 export default {
   async fetch(request, env, ctx) {
