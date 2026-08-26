@@ -72,3 +72,33 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   payload TEXT,
   FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  lead_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  external_id TEXT,
+  external_reference TEXT,
+  checkout_url TEXT,
+  amount REAL NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  status TEXT NOT NULL DEFAULT 'CREATED',
+  payload TEXT,
+  FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_payments_lead_id ON payments(lead_id);
+CREATE INDEX IF NOT EXISTS idx_payments_external_id ON payments(external_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  provider TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  external_id TEXT,
+  payload TEXT,
+  processed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_provider_external ON webhook_events(provider, external_id);
