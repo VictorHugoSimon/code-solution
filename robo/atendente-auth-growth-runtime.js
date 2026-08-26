@@ -1,9 +1,18 @@
 import growthRuntime from './atendente-growth-runtime.js';
 import { handlePanelAuth } from './panel-auth.js';
 import { handlePanelAuthEnhancements } from './panel-auth-enhancements.js';
+import { handlePanelAdminRecovery } from './panel-admin-recovery.js';
 
 export default {
   async fetch(request, env, ctx) {
+    let recoveryAuth = null;
+    try {
+      recoveryAuth = await handlePanelAdminRecovery(request, env);
+    } catch (error) {
+      console.error('Panel admin recovery failed; continuing with standard authentication.', String(error?.message || error).replace(/[\r\n\t]/g, ' ').slice(0, 500));
+    }
+    if (recoveryAuth) return recoveryAuth;
+
     let enhancedAuth = null;
     try {
       enhancedAuth = await handlePanelAuthEnhancements(request, env);
