@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-26T14:32:20.882Z",
+  "checkedAt": "2026-08-26T14:35:40.280Z",
   "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
   "zoneId": "68188e983aeadea279bf680ccfd260c9",
   "zoneHttp": 200,
@@ -14,8 +14,16 @@
   "recipientExists": false,
   "recipientVerified": false,
   "recipientVerificationState": "missing",
+  "accountTokensHttp": 403,
+  "accountTokenApiSuccess": false,
+  "accountOwnedTokenCount": 0,
+  "permissionGroupsHttp": 403,
+  "permissionGroupsApiSuccess": false,
+  "relevantPermissionGroups": [],
   "permissionReady": {
     "sendingRead": false,
-    "addressesRead": false
+    "addressesRead": false,
+    "accountTokensRead": false,
+    "permissionGroupsRead": false
   }
 }
