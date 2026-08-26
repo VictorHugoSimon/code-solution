@@ -1,0 +1,94 @@
+name: Verify admin bootstrap release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-admin-bootstrap-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for attendant runtime release
+        id: runtime
+        run: |
+          set -euo pipefail
+          url='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/autonomy/health'
+          expected='autonomous-os-2026-08-26.1'
+          ok=false
+          for i in $(seq 1 36); do
+            http=$(curl -sS --max-time 20 -o /tmp/health.json -w '%{http_code}' "$url" || true)
+            build=$(node -e "try{const x=require('/tmp/health.json');process.stdout.write(String(x.build||''))}catch{}")
+            echo "attempt=$i http=$http build=$build"
+            if [ "$http" = 200 ] && [ "$build" = "$expected" ]; then ok=true; break; fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "http=${http:-0}" >> "$GITHUB_OUTPUT"
+          echo "build=${build:-}" >> "$GITHUB_OUTPUT"
+          test "$ok" = true
+
+      - name: Validate auth endpoints are fail-closed
+        id: auth
+        if: steps.runtime.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          base='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+          session_http=$(curl -sS -o /tmp/session.json -w '%{http_code}' "$base/auth/session")
+          invalid_http=$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -X POST "$base/auth/login" -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"username":"admin","password":"definitely-wrong-password"}')
+          test "$session_http" = 401
+          test "$invalid_http" = 401
+          echo "session_http=$session_http" >> "$GITHUB_OUTPUT"
+          echo "invalid_http=$invalid_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist verification status
+        if: always()
+        env:
+          RUNTIME_OK: ${{ steps.runtime.outputs.ok }}
+          RUNTIME_HTTP: ${{ steps.runtime.outputs.http }}
+          RUNTIME_BUILD: ${{ steps.runtime.outputs.build }}
+          AUTH_OUTCOME: ${{ steps.auth.outcome }}
+          SESSION_HTTP: ${{ steps.auth.outputs.session_http }}
+          INVALID_HTTP: ${{ steps.auth.outputs.invalid_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/auth-bootstrap-release-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            expectedBuild:'autonomous-os-2026-08-26.1',
+            runtimeReached:e.RUNTIME_OK==='true',
+            runtimeHttp:Number(e.RUNTIME_HTTP||0),
+            runtimeBuild:e.RUNTIME_BUILD||'',
+            authFailClosed:e.AUTH_OUTCOME==='success',
+            unauthenticatedSessionHttp:Number(e.SESSION_HTTP||0),
+            invalidLoginHttp:Number(e.INVALID_HTTP||0),
+            loginUrl:'https://www.codesolution.com.br/painel/login/',
+            username:'admin',
+            bootstrapCredential:'one-time migration on first valid login',
+            plaintextPasswordStoredInRepository:false
+          },null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Auth Verify Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/auth-bootstrap-release-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record admin bootstrap release status'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce verification
+        if: always()
+        run: |
+          test '${{ steps.runtime.outputs.ok }}' = true
+          test '${{ steps.auth.outcome }}' = success
