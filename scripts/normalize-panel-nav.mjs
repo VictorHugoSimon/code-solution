@@ -68,6 +68,23 @@ function crmHeader() {
   return `<header class="top"><div class="row"><div class="brand">CODE <b>SOLUTION</b> · CRM</div><div class="navmini">${anchors}<a class="navlink" href="/painel/logout/">Sair</a></div><button id="newLead" class="btn primary">+ Novo lead</button></div></header>`;
 }
 
+function upgradeAgentCenter(html) {
+  let out = html;
+  out = out.replace(
+    "||(ta==='content'&&ak.includes('conte')))});}",
+    "||(ta==='content'&&ak.includes('conte'))||(ta==='executive'&&ak.includes('execut'))||(ta==='delivery'&&ak.includes('delivery')))});}",
+  );
+  out = out.replace(
+    "const latest=mine[0];return{className:'',label:'Ativo',task:latest||null};}",
+    "const latest=mine[0];return{className:'',label:String(agent.status)==='active-shadow'?'Shadow':'Ativo',task:latest||null};}",
+  );
+  out = out.replace(
+    /<section class="panel" style="margin-top:12px"><h2>Próximos agentes<\/h2><div id="planned">[\s\S]*?<\/div><\/section><section class="panel" style="margin-top:12px"><h2>Política de segurança<\/h2>/,
+    `<section class="panel" style="margin-top:12px"><h2>Próximas automações</h2><div id="planned"><div class="planned"><strong>Customer Success Agent</strong><span class="muted">Adoção, satisfação, riscos de churn e oportunidades de expansão.</span><br><span class="pill">Planejado</span></div><div class="planned"><strong>Finance Agent</strong><span class="muted">Indicadores financeiros internos e alertas; pagamentos e compromissos continuam exigindo aprovação humana.</span><br><span class="pill">Planejado</span></div></div></section><section class="panel" style="margin-top:12px"><h2>Política de segurança</h2>`,
+  );
+  return out;
+}
+
 for (const file of files) {
   let html = await fs.readFile(file, 'utf8');
   const start = html.indexOf('<header class="top">');
@@ -76,7 +93,8 @@ for (const file of files) {
 
   const module = currentModule(file);
   const header = module === 'crm' ? crmHeader() : normalHeader(module);
-  const next = html.slice(0, start) + header + html.slice(end + '</header>'.length);
+  let next = html.slice(0, start) + header + html.slice(end + '</header>'.length);
+  if (module === 'autonomia') next = upgradeAgentCenter(next);
   if (next !== html) {
     await fs.writeFile(file, next);
     console.log(`Panel navigation rebuilt: ${file}`);
