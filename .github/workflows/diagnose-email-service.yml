@@ -29,24 +29,30 @@ jobs:
           zone_id=$(node -e "const x=require('/tmp/email-service/zones.json');process.stdout.write((x.result&&x.result[0]&&x.result[0].id)||'')")
 
           sending_http=0
-          addresses_http=0
           if [ -n "$zone_id" ]; then
             sending_http=$(curl -sS -o /tmp/email-service/sending.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/email/sending/subdomains")
           else
             printf '{"success":false,"result":[]}' >/tmp/email-service/sending.json
           fi
           addresses_http=$(curl -sS -o /tmp/email-service/addresses.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/email/routing/addresses")
+          account_tokens_http=$(curl -sS -o /tmp/email-service/account-tokens.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/tokens?per_page=50")
+          permission_groups_http=$(curl -sS -o /tmp/email-service/permission-groups.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/tokens/permission_groups?per_page=100")
 
-          ZONE_HTTP="$zone_http" SENDING_HTTP="$sending_http" ADDRESSES_HTTP="$addresses_http" ZONE_ID="$zone_id" TARGET_EMAIL="$TARGET_EMAIL" node - <<'NODE'
+          ZONE_HTTP="$zone_http" SENDING_HTTP="$sending_http" ADDRESSES_HTTP="$addresses_http" ACCOUNT_TOKENS_HTTP="$account_tokens_http" PERMISSION_GROUPS_HTTP="$permission_groups_http" ZONE_ID="$zone_id" TARGET_EMAIL="$TARGET_EMAIL" node - <<'NODE'
           const fs=require('fs'),e=process.env;
           const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
           const zones=read('/tmp/email-service/zones.json');
           const sending=read('/tmp/email-service/sending.json');
           const addresses=read('/tmp/email-service/addresses.json');
+          const accountTokens=read('/tmp/email-service/account-tokens.json');
+          const permissionGroups=read('/tmp/email-service/permission-groups.json');
           const sendRows=Array.isArray(sending.result)?sending.result:[];
           const addressRows=Array.isArray(addresses.result)?addresses.result:[];
           const target=addressRows.find(a=>String(a.email||'').toLowerCase()===String(e.TARGET_EMAIL||'').toLowerCase());
           const sendingDomain=sendRows.find(s=>s.enabled===true && (s.name==='codesolution.com.br'||s.name==='*.codesolution.com.br'));
+          const groups=Array.isArray(permissionGroups.result)?permissionGroups.result:[];
+          const interestingGroups=groups.filter(g=>/Email Sending|Email Routing Addresses|Account API Tokens/i.test(String(g.name||''))).map(g=>({id:g.id||'',name:g.name||'',scopes:g.scopes||[]}));
+          const tokenRows=Array.isArray(accountTokens.result)?accountTokens.result:[];
           const out={
             checkedAt:new Date().toISOString(),
             accountId:e.CLOUDFLARE_ACCOUNT_ID||'',
@@ -63,7 +69,18 @@ jobs:
             recipientExists:Boolean(target),
             recipientVerified:Boolean(target&&target.verified),
             recipientVerificationState:target?(target.verified?'verified':'pending'):'missing',
-            permissionReady:{sendingRead:Number(e.SENDING_HTTP||0)===200,addressesRead:Number(e.ADDRESSES_HTTP||0)===200}
+            accountTokensHttp:Number(e.ACCOUNT_TOKENS_HTTP||0),
+            accountTokenApiSuccess:accountTokens.success===true,
+            accountOwnedTokenCount:tokenRows.length,
+            permissionGroupsHttp:Number(e.PERMISSION_GROUPS_HTTP||0),
+            permissionGroupsApiSuccess:permissionGroups.success===true,
+            relevantPermissionGroups:interestingGroups,
+            permissionReady:{
+              sendingRead:Number(e.SENDING_HTTP||0)===200,
+              addressesRead:Number(e.ADDRESSES_HTTP||0)===200,
+              accountTokensRead:Number(e.ACCOUNT_TOKENS_HTTP||0)===200,
+              permissionGroupsRead:Number(e.PERMISSION_GROUPS_HTTP||0)===200
+            }
           };
           fs.writeFileSync('docs/email-service-status.json',JSON.stringify(out,null,2)+'\n');
           NODE
