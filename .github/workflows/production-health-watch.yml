@@ -103,3 +103,5 @@ jobs:
         env:
           HEALTHY: ${{ steps.check.outputs.healthy }}
         run: test "$HEALTHY" = true
+
+# release-trigger: finalize-crm-access-2026-08-26
