@@ -1,0 +1,80 @@
+name: Validate live Home form conversion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-home-form-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate live Home form and lead contract
+        id: live
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/home-form
+          home_http=$(curl -LfsS --retry 6 --retry-delay 3 -o /tmp/home-form/home.html -w '%{http_code}' https://www.codesolution.com.br/)
+          runtime_http=$(curl -LfsS --retry 6 --retry-delay 3 -o /tmp/home-form/home-journey.js -w '%{http_code}' https://www.codesolution.com.br/home-journey.js)
+          test "$home_http" = 200
+          test "$runtime_http" = 200
+          grep -q 'Enviar formulário' /tmp/home-form/home.html
+          if grep -qi 'data-wa-link' /tmp/home-form/home.html; then echo '::error::WhatsApp CTA still present in live Home'; exit 1; fi
+          grep -q "fetch(API + '/lead'" /tmp/home-form/home-journey.js
+          grep -q 'Enviar formulário' /tmp/home-form/home-journey.js
+          if grep -qi 'data-wa-link' /tmp/home-form/home-journey.js; then echo '::error::WhatsApp CTA dependency still present in runtime'; exit 1; fi
+
+          lead_http=$(curl -sS -o /tmp/home-form/lead.json -w '%{http_code}' \
+            -X POST https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/lead \
+            -H 'content-type: application/json' \
+            --data '{"source":"home_form_live_contract_test"}')
+          test "$lead_http" = 400
+          node -e "const x=require('/tmp/home-form/lead.json'); if(x.error!=='validation_error') process.exit(1)"
+
+          echo "home_http=$home_http" >> "$GITHUB_OUTPUT"
+          echo "runtime_http=$runtime_http" >> "$GITHUB_OUTPUT"
+          echo "lead_http=$lead_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist live validation
+        if: always()
+        env:
+          OUTCOME: ${{ steps.live.outcome }}
+          HOME_HTTP: ${{ steps.live.outputs.home_http }}
+          RUNTIME_HTTP: ${{ steps.live.outputs.runtime_http }}
+          LEAD_HTTP: ${{ steps.live.outputs.lead_http }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/home-form-live-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            result:e.OUTCOME||'failure',
+            homeHttp:Number(e.HOME_HTTP||0),
+            runtimeHttp:Number(e.RUNTIME_HTTP||0),
+            leadContractHttp:Number(e.LEAD_HTTP||0),
+            primaryCta:'Enviar formulário',
+            whatsappCta:false,
+            leadEndpoint:'https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/lead',
+            crmFlow:'form -> /lead -> D1 CRM'
+          },null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Live Validation Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/home-form-live-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record live Home form validation"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce validation
+        if: always()
+        run: test '${{ steps.live.outcome }}' = success
