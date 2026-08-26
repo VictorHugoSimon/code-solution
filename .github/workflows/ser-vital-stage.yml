@@ -96,6 +96,28 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Configure Asaas Sandbox secrets when available
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          if [ -n "${ASAAS_SANDBOX_API_KEY}" ]; then
+            printf '%s' "$ASAAS_SANDBOX_API_KEY" | npx wrangler@4.124.0 pages secret put ASAAS_API_KEY --project-name ser-vital-stage
+            echo 'ASAAS_API_KEY de sandbox configurada.'
+          else
+            echo 'ASAAS_SANDBOX_API_KEY ausente; checkout seguirá em fallback seguro para WhatsApp.'
+          fi
+          if [ -n "${ASAAS_WEBHOOK_TOKEN}" ]; then
+            printf '%s' "$ASAAS_WEBHOOK_TOKEN" | npx wrangler@4.124.0 pages secret put ASAAS_WEBHOOK_TOKEN --project-name ser-vital-stage
+            echo 'ASAAS_WEBHOOK_TOKEN configurado.'
+          else
+            echo 'ASAAS_WEBHOOK_TOKEN ausente; webhook Asaas seguirá bloqueado.'
+          fi
+        env:
+          ASAAS_SANDBOX_API_KEY: ${{ secrets.ASAAS_SANDBOX_API_KEY }}
+          ASAAS_WEBHOOK_TOKEN: ${{ secrets.ASAAS_WEBHOOK_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy STAGE
         working-directory: ser-vital
         run: npx wrangler@4.124.0 pages deploy public --project-name ser-vital-stage --branch stage --commit-dirty=true
@@ -125,7 +147,7 @@ jobs:
           printf '%s' "$BOOK" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok)process.exit(1)})"
           echo "Smoke test OK: lead criado e horário reservado."
 
-          npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --command "DELETE FROM events WHERE lead_id='$LEAD_ID'; DELETE FROM leads WHERE id='$LEAD_ID';"
+          npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --command "DELETE FROM webhook_events WHERE id IN (SELECT id FROM webhook_events WHERE payload LIKE '%' || '$LEAD_ID' || '%'); DELETE FROM payments WHERE lead_id='$LEAD_ID'; DELETE FROM events WHERE lead_id='$LEAD_ID'; DELETE FROM leads WHERE id='$LEAD_ID';"
           echo 'Dados sintéticos removidos.'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
