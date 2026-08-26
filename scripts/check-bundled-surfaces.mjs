@@ -10,10 +10,12 @@ const checks = [
       'id="cs-commercial-extension"',
       'id="cs-home-lead"',
       'id="cs-home-lead-form"',
+      'data-cs-home-journey',
+      'Enviar e ver meu próximo passo',
+      'data-cs-success',
       'name="consent"',
       'href="/privacidade/"',
-      'code-solution-atendente.victorhugoteixeirasimon6.workers.dev/lead',
-      "window.gtag('event','generate_lead'",
+      'src="/home-journey.js"',
       'O que as empresas perguntam antes de contratar',
     ],
   },
@@ -43,12 +45,23 @@ for (const spec of checks) {
   if (schemaMarkers !== 1) failures.push(`${spec.file}: expected 1 schema marker in bundle, found ${schemaMarkers}`);
 }
 
+const journeyRuntime = await fs.readFile('deploy/home-journey.js', 'utf8').catch(() => '');
+for (const needle of [
+  'code-solution-atendente.victorhugoteixeirasimon6.workers.dev',
+  "fetch(API + '/lead'",
+  "window.gtag('event', 'generate_lead'",
+  "source: q.get('utm_source') || 'site_home_journey'",
+  "root.querySelector('[data-protocol]')",
+]) {
+  if (!journeyRuntime.includes(needle)) failures.push(`deploy/home-journey.js: missing ${needle}`);
+}
+
 if (failures.length) {
   console.error('Bundled surface validation failed:');
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Bundled surfaces OK: post-unpack commercial UI, AEO and Home lead capture verified.');
+console.log('Bundled surfaces OK: commercial UI, AEO, guided Home journey, CRM capture and analytics runtime verified.');
 
 function readTemplate(html, file) {
   const match = html.match(/<script type="__bundler\/template">([\s\S]*?)<\/script>/);
