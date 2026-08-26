@@ -102,3 +102,31 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Smoke test lead → CRM DB → agenda
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://stage.ser-vital-stage.pages.dev"
+          echo 'Health:'
+          HEALTH=$(curl --retry 8 --retry-all-errors --retry-delay 2 -fsS "$BASE_URL/api/health")
+          echo "$HEALTH"
+          echo "$HEALTH" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok||j.database!=='ok')process.exit(1)})"
+
+          AVAIL=$(curl --retry 5 --retry-all-errors --retry-delay 2 -fsS "$BASE_URL/api/availability")
+          SLOT=$(printf '%s' "$AVAIL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.slots?.length)process.exit(1);process.stdout.write(j.slots[0])})")
+
+          PHONE="smoke-${GITHUB_RUN_ID}"
+          LEAD=$(curl -fsS -X POST "$BASE_URL/api/leads" -H 'content-type: application/json' --data "{\"name\":\"Smoke Test Ser Vital\",\"phone\":\"$PHONE\",\"email\":\"smoke@example.invalid\",\"interest\":\"Reiki\",\"message\":\"Teste automatizado de deploy\",\"consent\":true,\"utm_source\":\"github-actions\",\"utm_medium\":\"smoke-test\",\"utm_campaign\":\"stage-deploy\",\"landing_page\":\"/smoke\"}")
+          LEAD_ID=$(printf '%s' "$LEAD" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok||!j.id)process.exit(1);process.stdout.write(j.id)})")
+
+          BOOK=$(curl -fsS -X POST "$BASE_URL/api/availability" -H 'content-type: application/json' --data "{\"lead_id\":\"$LEAD_ID\",\"scheduled_at\":\"$SLOT\"}")
+          printf '%s' "$BOOK" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok)process.exit(1)})"
+          echo "Smoke test OK: lead criado e horário reservado."
+
+          npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --command "DELETE FROM events WHERE lead_id='$LEAD_ID'; DELETE FROM leads WHERE id='$LEAD_ID';"
+          echo 'Dados sintéticos removidos.'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
