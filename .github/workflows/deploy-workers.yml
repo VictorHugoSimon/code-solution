@@ -43,7 +43,7 @@ jobs:
           test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_CLOUDFLARE_ACCOUNT_ID"
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
-      - name: Validate Worker source
+      - name: Validate Worker source and Proposal Agent policy
         run: |
           set -euo pipefail
           node --check robo/worker.js
@@ -55,8 +55,11 @@ jobs:
           node --check robo/atendente-auth-growth-runtime.js
           node --check robo/growth-api.js
           node --check robo/crm-automation.js
+          node --check robo/proposal-agent.js
           node --check robo/autonomous-os.js
           node --check robo/autonomy-entry-runtime.js
+          node scripts/check-proposal-agent.mjs
+          python3 scripts/check-crm-schema.py
 
       - name: Provision CRM D1 and apply all migrations
         id: d1
@@ -96,11 +99,11 @@ jobs:
             npx wrangler@4 d1 execute code-solution-crm --remote --file="$migration" --yes
           done
 
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals') ORDER BY name;" --json > /tmp/schema-check.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals','crm_proposals','crm_proposal_events') ORDER BY name;" --json > /tmp/schema-check.json
           node - <<'NODE'
           const fs=require('fs');
           const text=fs.readFileSync('/tmp/schema-check.json','utf8');
-          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals']) {
+          for(const name of ['leads','crm_tasks','crm_alerts','crm_owners','crm_automation_runs','lead_acquisition_links','acquisition_events','growth_accounts','panel_users','panel_sessions','panel_audit_log','autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals','crm_proposals','crm_proposal_events']) {
             if(!text.includes(name)) throw new Error(`missing table ${name}`);
           }
           NODE
@@ -163,7 +166,7 @@ jobs:
           [ -z "$WHATSAPP_PHONE_ID" ] || printf '%s' "$WHATSAPP_PHONE_ID" | npx wrangler@4 secret put WHATSAPP_PHONE_ID --config "$cfg"
           [ -z "$OWNER_WHATSAPP" ] || printf '%s' "$OWNER_WHATSAPP" | npx wrangler@4 secret put OWNER_WHATSAPP --config "$cfg"
 
-      - name: Real production smoke for Workers CRM Autonomous OS and panel security
+      - name: Real production smoke for Workers CRM Autonomous OS Proposal Agent and panel security
         id: smoke
         env:
           CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
@@ -175,10 +178,13 @@ jobs:
 
           curl -fsS --retry 5 --retry-delay 3 "$CONTENT/health" >/tmp/content.json
           curl -fsS --retry 5 --retry-delay 3 "$ATTENDANT/health" >/tmp/attendant.json
+          curl -fsS --retry 5 --retry-delay 3 "$ATTENDANT/autonomy/health" >/tmp/autonomy-health.json
           node - <<'NODE'
-          const c=require('/tmp/content.json'),a=require('/tmp/attendant.json');
+          const c=require('/tmp/content.json'),a=require('/tmp/attendant.json'),h=require('/tmp/autonomy-health.json');
           if(c.ok!==true || c.ready!==true || !c.build) throw new Error('content worker not ready');
           if(a.ok!==true || a.service!=='code-solution-atendente' || a.storage!=='d1') throw new Error('attendant worker not on D1');
+          if(h.ok!==true || !Array.isArray(h.agents) || !h.agents.includes('proposal')) throw new Error('Proposal Agent is not active in autonomy health');
+          if(!Array.isArray(h.approvalGates) || !h.approvalGates.includes('proposal_send')) throw new Error('proposal_send approval gate missing');
           NODE
 
           chat_http=$(curl -sS --max-time 45 -o /tmp/chat.json -w '%{http_code}' "$ATTENDANT/chat" -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"messages":[{"role":"user","content":"Olá. Preciso automatizar um processo empresarial e quero entender o próximo passo."}],"context":{"source":"deploy_smoke","consent":true}}')
@@ -198,11 +204,12 @@ jobs:
 
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/summary")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/autonomy/summary")" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/autonomy/proposals")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/me/security")" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$ATTENDANT/auth/me/password" -H 'content-type: application/json' --data '{}')" = 401
 
-          for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary autonomy/summary autonomy/tasks autonomy/approvals; do
+          for route in summary operations/summary acquisition/summary?days=30 alerts tasks owners growth/summary autonomy/summary autonomy/tasks autonomy/approvals autonomy/proposals?limit=5; do
             file=$(echo "$route" | tr '/?' '__')
             http=$(curl -sS --max-time 30 -o "/tmp/${file}.json" -w '%{http_code}' "$ATTENDANT/crm/$route" -H "x-crm-key: $CRM_ADMIN_KEY")
             test "$http" = 200
@@ -212,6 +219,11 @@ jobs:
           if(x.ok!==true) throw new Error(`authenticated CRM smoke failed for ${process.env.FILE}`);
           NODE
           done
+
+          node - <<'NODE'
+          const x=require('/tmp/autonomy_proposals_limit=5.json');
+          if(!Array.isArray(x.proposals)) throw new Error('proposal list contract invalid');
+          NODE
 
           auto_http=$(curl -sS --max-time 40 -o /tmp/automation.json -w '%{http_code}' "$ATTENDANT/crm/automation/run" -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
           test "$auto_http" = 200
@@ -228,22 +240,25 @@ jobs:
           const x=require('/tmp/autonomy-summary.json');
           if(run.ok!==true || typeof run.tasksCreated!=='number' || typeof run.tasksExecuted!=='number' || typeof run.approvalsRequested!=='number') throw new Error('autonomous run invalid');
           if(x.ok!==true || !Array.isArray(x.agents) || !Array.isArray(x.goals) || !Array.isArray(x.pendingApprovals)) throw new Error('autonomy summary invalid');
-          for(const id of ['orchestrator','sales_ops','prospecting','content','reliability']) if(!x.agents.some(a=>a.id===id)) throw new Error(`missing autonomy agent ${id}`);
+          for(const id of ['orchestrator','sales_ops','prospecting','content','reliability','proposal']) if(!x.agents.some(a=>a.id===id)) throw new Error(`missing autonomy agent ${id}`);
           if(x.policy?.failMode!=='fail_closed') throw new Error('autonomy policy must fail closed');
+          if(!x.policy?.autoExecute?.includes('proposal_draft_generation')) throw new Error('proposal draft internal policy missing');
           if(!x.policy?.approvalRequired?.includes('external_message') || !x.policy?.approvalRequired?.includes('proposal_send') || !x.policy?.approvalRequired?.includes('destructive_change')) throw new Error('critical approval gates missing');
+          if(typeof x.proposalCounts!=='object' || x.proposalCounts===null) throw new Error('proposalCounts missing');
           NODE
 
       - name: Publish release summary
         if: always()
         run: |
           {
-            echo '## Code Solution · Workers + Autonomous OS production release'
+            echo '## Code Solution · Workers + Autonomous OS + Proposal Agent production release'
             echo ''
             echo '- Source: `${{ github.sha }}`'
             echo '- Cloudflare account: personal account enforced'
             echo '- D1 migrations: `${{ steps.d1.outcome }}`'
             echo '- Content Worker: `${{ steps.content.outcome }}`'
             echo '- Attendant + Autonomous OS Worker: `${{ steps.attendant.outcome }}`'
+            echo '- Proposal Agent: draft generation active; proposal_send human-gated'
             echo '- Production smoke: `${{ steps.smoke.outcome }}`'
             echo '- External critical actions: approval gated'
             echo '- Repository writes: disabled'
