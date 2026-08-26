@@ -40,9 +40,65 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Provision D1 STAGE
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_NAME="ser-vital-stage-db"
+          npx wrangler@4.124.0 d1 list --json > /tmp/d1.json
+          DB_ID=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/d1.json','utf8'));const x=j.find(v=>v.name==='ser-vital-stage-db');if(x)process.stdout.write(x.uuid||x.id||'')")
+          if [ -z "$DB_ID" ]; then
+            npx wrangler@4.124.0 d1 create "$DB_NAME" --location enam
+            npx wrangler@4.124.0 d1 list --json > /tmp/d1.json
+            DB_ID=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/d1.json','utf8'));const x=j.find(v=>v.name==='ser-vital-stage-db');if(x)process.stdout.write(x.uuid||x.id||'')")
+          fi
+          test -n "$DB_ID" || (echo 'Não foi possível resolver o ID do D1' && exit 1)
+          echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
+          echo "DB_ID=$DB_ID" >> "$GITHUB_ENV"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Apply D1 schema
+        working-directory: ser-vital
+        run: npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --file=schema.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Configure D1 binding for deployment
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          cat >> wrangler.toml <<EOF
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "${DB_NAME}"
+          database_id = "${DB_ID}"
+          EOF
+
+      - name: Configure admin secret when available
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          ADMIN_VALUE="${SER_VITAL_ADMIN_TOKEN:-${ADMIN_PASSWORD:-}}"
+          if [ -n "$ADMIN_VALUE" ]; then
+            printf '%s' "$ADMIN_VALUE" | npx wrangler@4.124.0 pages secret put ADMIN_TOKEN --project-name ser-vital-stage
+            echo 'ADMIN_TOKEN configurado.'
+          else
+            echo 'Nenhum secret administrativo encontrado; /admin seguirá bloqueado até configuração.'
+          fi
+        env:
+          SER_VITAL_ADMIN_TOKEN: ${{ secrets.SER_VITAL_ADMIN_TOKEN }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy STAGE
         working-directory: ser-vital
-        run: npx wrangler@4.124.0 pages deploy public --project-name ser-vital-stage --branch stage
+        run: npx wrangler@4.124.0 pages deploy public --project-name ser-vital-stage --branch stage --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
