@@ -6,7 +6,7 @@ const panels = [
   'deploy/painel/relatorios/index.html','deploy/painel/relatorios/saude/index.html','deploy/painel/usuarios/index.html','deploy/painel/conta/index.html',
 ];
 
-const hrefs = ['/painel/','/painel/crm/','/painel/crm/autonomia/','/painel/atendimento/','/painel/agenda/','/painel/prospeccao/','/painel/marketing/','/painel/inteligencia/','/painel/growth/','/painel/relatorios/','/painel/relatorios/saude/','/painel/usuarios/','/painel/conta/','/painel/logout/'];
+const hrefs = ['/painel/','/painel/crm/','/painel/crm/autonomia/','/painel/crm/propostas/','/painel/atendimento/','/painel/agenda/','/painel/prospeccao/','/painel/marketing/','/painel/inteligencia/','/painel/growth/','/painel/relatorios/','/painel/relatorios/saude/','/painel/usuarios/','/painel/conta/','/painel/logout/'];
 const failures = [];
 
 for (const file of panels) {
@@ -41,6 +41,8 @@ const efficiency = await fs.readFile('deploy/painel/marketing/campaign-efficienc
 for(const contract of ['Ranking de eficiência comercial','winRate*.5','hotRate*.3','avgScore*.2']) if(!efficiency.includes(contract)) failures.push(`campaign efficiency: missing ${contract}`);
 const proposals = await fs.readFile('deploy/painel/crm/propostas/index.html','utf8');
 for(const contract of ['Proposal Agent','/api/crm/autonomy','/proposal/generate','Aprovar para envio','Lacunas de discovery','Gerar nova versão']) if(!proposals.includes(contract)) failures.push(`proposals: missing ${contract}`);
+const agents = await fs.readFile('deploy/painel/crm/autonomia/index.html','utf8');
+for(const contract of ['Central de Agentes em tempo real','Trabalhando agora','Atividade recente dos agentes','Delivery Agent','Executive Agent','setInterval(load,15000)']) if(!agents.includes(contract)) failures.push(`agent center: missing ${contract}`);
 
 if (failures.length) { console.error('Panel navigation validation failed:'); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
-console.log('Panel navigation OK: all modules, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
+console.log('Panel navigation OK: Agent Center, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
