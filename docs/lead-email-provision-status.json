@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-08-26T14:39:11.747Z",
+  "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
+  "zoneId": "68188e983aeadea279bf680ccfd260c9",
+  "targetEmail": "victorhugoteixeirasimon6@gmail.com",
+  "zoneHttp": 200,
+  "sendingBeforeHttp": 403,
+  "addressesBeforeHttp": 403,
+  "sendingAfterHttp": 403,
+  "addressesAfterHttp": 403,
+  "permissionsOk": false,
+  "sendingDomain": {
+    "exists": false,
+    "enabled": false,
+    "name": "",
+    "tag": ""
+  },
+  "recipient": {
+    "exists": false,
+    "verified": false,
+    "state": "missing"
+  },
+  "readyForWorkerBinding": false,
+  "nextStep": "grant_token_permissions"
+}
