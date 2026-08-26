@@ -1,0 +1,86 @@
+name: Provision Code Solution lead email
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/provision-lead-email.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision Email Service safely
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TARGET_EMAIL: victorhugoteixeirasimon6@gmail.com
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/email-provision docs
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          zone_http=$(curl -sS -o /tmp/email-provision/zones.json -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br&account.id=${CLOUDFLARE_ACCOUNT_ID}")
+          zone_id=$(node -e "const x=require('/tmp/email-provision/zones.json');process.stdout.write((x.result&&x.result[0]&&x.result[0].id)||'')")
+          if [ -z "$zone_id" ]; then echo '::error::Code Solution zone not found'; exit 1; fi
+
+          sending_http=$(curl -sS -o /tmp/email-provision/sending-before.json -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/email/sending/subdomains")
+          addresses_http=$(curl -sS -o /tmp/email-provision/addresses-before.json -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/email/routing/addresses")
+
+          if [ "$sending_http" = 200 ]; then
+            sending_exists=$(node -e "const x=require('/tmp/email-provision/sending-before.json');process.stdout.write((x.result||[]).some(s=>s.name==='codesolution.com.br'||s.name==='*.codesolution.com.br')?'yes':'no')")
+            if [ "$sending_exists" != yes ]; then
+              curl -sS -o /tmp/email-provision/create-sending.json -w '%{http_code}' -X POST "${auth[@]}" --data '{"name":"codesolution.com.br"}' "https://api.cloudflare.com/client/v4/zones/${zone_id}/email/sending/subdomains" >/tmp/email-provision/create-sending-http.txt
+            fi
+          fi
+
+          if [ "$addresses_http" = 200 ]; then
+            address_exists=$(TARGET_EMAIL="$TARGET_EMAIL" node -e "const x=require('/tmp/email-provision/addresses-before.json');process.stdout.write((x.result||[]).some(a=>String(a.email||'').toLowerCase()===process.env.TARGET_EMAIL.toLowerCase())?'yes':'no')")
+            if [ "$address_exists" != yes ]; then
+              TARGET_EMAIL="$TARGET_EMAIL" node -e "process.stdout.write(JSON.stringify({email:process.env.TARGET_EMAIL}))" >/tmp/email-provision/address-body.json
+              curl -sS -o /tmp/email-provision/create-address.json -w '%{http_code}' -X POST "${auth[@]}" --data @/tmp/email-provision/address-body.json "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/email/routing/addresses" >/tmp/email-provision/create-address-http.txt
+            fi
+          fi
+
+          sleep 3
+          sending_after_http=$(curl -sS -o /tmp/email-provision/sending-after.json -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/email/sending/subdomains")
+          addresses_after_http=$(curl -sS -o /tmp/email-provision/addresses-after.json -w '%{http_code}' -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/email/routing/addresses")
+
+          ZONE_ID="$zone_id" ZONE_HTTP="$zone_http" SENDING_BEFORE_HTTP="$sending_http" ADDRESSES_BEFORE_HTTP="$addresses_http" SENDING_AFTER_HTTP="$sending_after_http" ADDRESSES_AFTER_HTTP="$addresses_after_http" TARGET_EMAIL="$TARGET_EMAIL" node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const sending=read('/tmp/email-provision/sending-after.json');
+          const addresses=read('/tmp/email-provision/addresses-after.json');
+          const sendRows=Array.isArray(sending.result)?sending.result:[];
+          const addressRows=Array.isArray(addresses.result)?addresses.result:[];
+          const domain=sendRows.find(s=>s.name==='codesolution.com.br'||s.name==='*.codesolution.com.br');
+          const target=addressRows.find(a=>String(a.email||'').toLowerCase()===String(e.TARGET_EMAIL||'').toLowerCase());
+          const permissionsOk=Number(e.SENDING_BEFORE_HTTP)===200&&Number(e.ADDRESSES_BEFORE_HTTP)===200;
+          const ready=Boolean(permissionsOk&&domain&&domain.enabled===true&&target&&target.verified);
+          const out={
+            checkedAt:new Date().toISOString(),accountId:e.CLOUDFLARE_ACCOUNT_ID||'',zoneId:e.ZONE_ID||'',targetEmail:e.TARGET_EMAIL||'',
+            zoneHttp:Number(e.ZONE_HTTP||0),sendingBeforeHttp:Number(e.SENDING_BEFORE_HTTP||0),addressesBeforeHttp:Number(e.ADDRESSES_BEFORE_HTTP||0),
+            sendingAfterHttp:Number(e.SENDING_AFTER_HTTP||0),addressesAfterHttp:Number(e.ADDRESSES_AFTER_HTTP||0),permissionsOk,
+            sendingDomain:{exists:Boolean(domain),enabled:Boolean(domain&&domain.enabled),name:domain?.name||'',tag:domain?.tag||''},
+            recipient:{exists:Boolean(target),verified:Boolean(target&&target.verified),state:target?(target.verified?'verified':'pending'):'missing'},
+            readyForWorkerBinding:ready,
+            nextStep:!permissionsOk?'grant_token_permissions':!domain?'retry_sending_domain':!domain.enabled?'wait_domain_verification':!target?'create_destination':!target.verified?'verify_destination_email':'enable_worker_binding'
+          };
+          fs.writeFileSync('docs/lead-email-provision-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Persist provisioning status
+        if: always()
+        run: |
+          git config user.name "Code Solution Lead Email Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/lead-email-provision-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record lead email provisioning status"
+          git pull --rebase origin main
+          git push origin HEAD:main
