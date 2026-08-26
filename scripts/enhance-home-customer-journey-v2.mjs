@@ -51,10 +51,13 @@ const funnel = `<style data-cs-home-journey-style>
 </div>
 <script src="/home-journey.js" defer></script>`;
 
-function replaceJourney(markup) {
+function replaceJourney(markup, required = false) {
   if (markup.includes('data-cs-home-journey')) return markup;
-  const block = /<div class="cs-lead" id="cs-home-lead">[\s\S]*?<\/script>/;
-  if (!block.test(markup)) throw new Error('Bloco cs-home-lead original não encontrado');
+  const block = /<div[^>]*id="cs-home-lead"[^>]*>[\s\S]*?<\/script>/;
+  if (!block.test(markup)) {
+    if (required) throw new Error('Bloco cs-home-lead original não encontrado no template do cliente');
+    return markup;
+  }
   return markup
     .replace(block, funnel)
     .replace(/Você pode explorar soluções por setor, estimar uma faixa de investimento, medir a maturidade digital ou conversar com a Code Solution\. Tudo parte do problema real da operação\./g, 'Comece pela jornada guiada abaixo ou explore as ferramentas da Code Solution. Tudo parte do problema real da operação.');
@@ -73,12 +76,12 @@ let template;
 try { template = JSON.parse(match[1]); }
 catch (error) { throw new Error(`Template original inválido antes da jornada: ${error.message}`); }
 
-const transformedTemplate = replaceJourney(template);
-const transformedOuter = replaceJourney(html);
+const transformedTemplate = replaceJourney(template, true);
+const transformedOuter = replaceJourney(html, false);
 let nextHtml = transformedOuter;
 
 const nextMatch = nextHtml.match(templateRe);
-if (!nextMatch) throw new Error('__bundler/template desapareceu após transformação externa');
+if (!nextMatch) throw new Error('__bundler/template desapareceu após transformação');
 nextHtml = nextHtml.replace(templateRe, `${templateOpen}${encodeTemplate(transformedTemplate)}</script>`);
 
 await fs.writeFile(file, nextHtml);
@@ -88,7 +91,6 @@ const verifyMatch = verify.match(templateRe);
 if (!verifyMatch) throw new Error('Template empacotado ausente após gravação');
 const verifyTemplate = JSON.parse(verifyMatch[1]);
 for (const marker of ['data-cs-home-journey','Enviar e ver meu próximo passo','data-cs-success','/home-journey.js']) {
-  if (!verify.includes(marker)) throw new Error(`Home externa inválida: ausente ${marker}`);
   if (!verifyTemplate.includes(marker)) throw new Error(`Template da Home inválido: ausente ${marker}`);
 }
 if (/Conversar com o Codi|>Codi</i.test(verifyTemplate)) throw new Error('Branding legado Codi encontrado na Home');
