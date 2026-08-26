@@ -189,4 +189,4 @@ jobs:
           test "$SMOKE" = success
           test "$BACKEND" = success
 
-# release-trigger: approved-2026-08-26
+# release-trigger: repaired-admin-login-2026-08-26
