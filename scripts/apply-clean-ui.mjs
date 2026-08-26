@@ -165,7 +165,15 @@ for(const file of files){
   const after=transformBundled(before,isHome);
   if(after!==before){await fs.writeFile(file,after);changed++;}
   if(!after.includes('data-cs-clean-ui="1"')) throw new Error(`Tema clean ausente em ${relative}`);
-  if(isHome && !after.includes('data-cs-clean-home-runtime="1"')) throw new Error('Runtime clean da Home ausente');
+  if(isHome){
+    const bundled=after.match(TEMPLATE_RE);
+    let homeMarkup=after;
+    if(bundled){
+      try{homeMarkup=JSON.parse(bundled[1]);}
+      catch(error){throw new Error(`Não foi possível validar o runtime clean da Home: ${error.message}`);}
+    }
+    if(!homeMarkup.includes('data-cs-clean-home-runtime="1"')) throw new Error('Runtime clean da Home ausente');
+  }
 }
 
 console.log(`Tema clean Code Solution aplicado em ${files.length} páginas (${changed} atualizadas).`);
