@@ -7,20 +7,25 @@ const panels = [
 ];
 
 const hrefs = ['/painel/','/painel/crm/','/painel/crm/autonomia/','/painel/crm/propostas/','/painel/atendimento/','/painel/agenda/','/painel/prospeccao/','/painel/marketing/','/painel/inteligencia/','/painel/growth/','/painel/relatorios/','/painel/relatorios/saude/','/painel/usuarios/','/painel/conta/','/painel/logout/'];
+const shellContracts = ['class="cs-sidebar"','id="csBell"','id="csBellBadge"','id="csHumanSummary"','data-cs-action="crm"','data-cs-action="autonomia"','data-cs-action="agenda"','cs_seen_new_leads_v1','/api/crm/leads?limit=250','/api/crm/autonomy','setInterval(refresh,20000)'];
 const failures = [];
 
 for (const file of panels) {
   const html = await fs.readFile(file, 'utf8');
-  const start = html.indexOf('<header class="top">');
-  const end = start >= 0 ? html.indexOf('</header>', start) : -1;
-  if (start < 0 || end < 0) { failures.push(`${file}: header missing`); continue; }
-  const header = html.slice(start, end + '</header>'.length);
+  for (const contract of shellContracts) if (!html.includes(contract)) failures.push(`${file}: sidebar contract missing ${contract}`);
   for (const href of hrefs) {
-    const count = header.split(`href="${href}"`).length - 1;
-    if (count !== 1) failures.push(`${file}: expected one ${href} link in header, found ${count}`);
+    const count = html.split(`href="${href}"`).length - 1;
+    if (count < 1) failures.push(`${file}: expected ${href} in persistent sidebar`);
   }
-  if (header.includes('${encodeURIComponent(l.id)}')) failures.push(`${file}: lead interpolation leaked into header`);
-  if (header.includes('>Atender</a>') && !file.includes('/atendimento/')) failures.push(`${file}: unexpected lead action in global navigation`);
+  const sidebarStart = html.indexOf('<aside class="cs-sidebar"');
+  const sidebarEnd = sidebarStart >= 0 ? html.indexOf('</aside>',sidebarStart) : -1;
+  if (sidebarStart < 0 || sidebarEnd < 0) failures.push(`${file}: persistent sidebar missing`);
+  else {
+    const sidebar = html.slice(sidebarStart,sidebarEnd + 8);
+    for(const href of hrefs.filter(h=>h!=='/painel/logout/')) if(!sidebar.includes(`href="${href}"`)) failures.push(`${file}: ${href} missing from sidebar`);
+    if(!sidebar.includes('href="/painel/logout/"')) failures.push(`${file}: logout missing from sidebar`);
+  }
+  if (html.includes('${encodeURIComponent(l.id)}') && !html.includes('/painel/atendimento/?lead=${encodeURIComponent(l.id)}')) failures.push(`${file}: unexpected lead interpolation leak`);
 }
 
 const prospecting = await fs.readFile('deploy/painel/prospeccao/index.html', 'utf8');
@@ -42,8 +47,8 @@ for(const contract of ['Ranking de eficiência comercial','winRate*.5','hotRate*
 const proposals = await fs.readFile('deploy/painel/crm/propostas/index.html','utf8');
 for(const contract of ['Proposal Agent','/api/crm/autonomy','/proposal/generate','Aprovar para envio','Lacunas de discovery','Gerar nova versão']) if(!proposals.includes(contract)) failures.push(`proposals: missing ${contract}`);
 const agents = await fs.readFile('deploy/painel/crm/autonomia/index.html','utf8');
-for(const contract of ['Central de Agentes em tempo real','Trabalhando agora','Atividade recente dos agentes','Customer Success Agent','Finance Agent','active-shadow','setInterval(load,15000)']) if(!agents.includes(contract)) failures.push(`agent center: missing ${contract}`);
+for(const contract of ['Central de Agentes em tempo real','Trabalhando agora','Atividade recente dos agentes','Customer Success Agent','Finance Agent','active-shadow','setInterval(load,15000)','class="cs-sidebar"']) if(!agents.includes(contract)) failures.push(`agent center: missing ${contract}`);
 if (!agents.includes("ta==='executive'") || !agents.includes("ta==='delivery'")) failures.push('agent center: Delivery/Executive task mapping missing');
 
 if (failures.length) { console.error('Panel navigation validation failed:'); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
-console.log('Panel navigation OK: Agent Center with active Delivery/Executive visibility, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
+console.log('Panel navigation OK: persistent sidebar, new-lead notification bell, human-action badges, Agent Center, Proposal Agent, health, governance and lead deep-links validated.');
