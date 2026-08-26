@@ -16,3 +16,5 @@ crons = ["*/30 * * * *"]
 WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 AI_MODEL = "llama-3.1-8b-instant"
 ALLOWED_ORIGINS = "https://www.codesolution.com.br,https://codesolution.com.br"
+LEAD_NOTIFY_EMAIL = "victorhugoteixeirasimon6@gmail.com"
+LEAD_EMAIL_FROM = "leads@codesolution.com.br"
