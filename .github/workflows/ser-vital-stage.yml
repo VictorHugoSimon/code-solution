@@ -1,0 +1,48 @@
+name: Ser Vital — Deploy STAGE
+
+on:
+  push:
+    branches:
+      - ser-vital-bootstrap
+    paths:
+      - 'ser-vital/**'
+      - '.github/workflows/ser-vital-stage.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Cloudflare credentials
+        shell: bash
+        run: |
+          test -n "${CLOUDFLARE_API_TOKEN}" || (echo 'CLOUDFLARE_API_TOKEN ausente' && exit 1)
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || (echo 'CLOUDFLARE_ACCOUNT_ID ausente' && exit 1)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Create Pages project if needed
+        working-directory: ser-vital
+        continue-on-error: true
+        run: npx wrangler@4.124.0 pages project create ser-vital-stage --production-branch ser-vital-bootstrap
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy STAGE
+        working-directory: ser-vital
+        run: npx wrangler@4.124.0 pages deploy public --project-name ser-vital-stage --branch stage
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
