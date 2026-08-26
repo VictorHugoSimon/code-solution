@@ -104,4 +104,4 @@ jobs:
           HEALTHY: ${{ steps.check.outputs.healthy }}
         run: test "$HEALTHY" = true
 
-# release-trigger: finalize-crm-access-2026-08-26-retry-2
+# release-trigger: final-admin-recovery-and-pages-2026-08-26
