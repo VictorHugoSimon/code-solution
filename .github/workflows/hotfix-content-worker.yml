@@ -1,0 +1,56 @@
+name: Hotfix Content Worker health
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.issue.user.login == 'VictorHugoSimon' && github.event.issue.title == 'OPS: deploy Content Worker health hotfix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_CLOUDFLARE_ACCOUNT_ID: cad25fe6c91871bbafb58236cf9b9b81
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate personal Cloudflare account
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Validate Content Worker runtime
+        run: |
+          set -euo pipefail
+          node --check robo/worker.js
+          node --check robo/growth-worker-runtime.js
+          grep -q "Access-Control-Allow-Origin" robo/growth-worker-runtime.js
+          grep -q "https://www.codesolution.com.br" robo/growth-worker-runtime.js
+
+      - name: Deploy Content Worker only
+        working-directory: robo
+        run: npx wrangler@4 deploy --config wrangler.toml
+
+      - name: Validate live health and browser CORS
+        run: |
+          set -euo pipefail
+          sleep 8
+          headers=$(mktemp)
+          body=$(mktemp)
+          http=$(curl -sS --retry 6 --retry-delay 3 -D "$headers" -o "$body" -w '%{http_code}' \
+            -H 'Origin: https://www.codesolution.com.br' \
+            https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health)
+          test "$http" = 200
+          grep -qi '^access-control-allow-origin: https://www.codesolution.com.br' "$headers"
+          node -e "const x=require(process.argv[1]); if(x.ok!==true || x.ready!==true) process.exit(1)" "$body"
+          echo 'Content Worker health CORS hotfix validated in production.'
