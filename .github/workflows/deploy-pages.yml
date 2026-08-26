@@ -188,3 +188,5 @@ jobs:
           test "$PAGES" = success
           test "$SMOKE" = success
           test "$BACKEND" = success
+
+# release-trigger: approved-2026-08-26
