@@ -42,7 +42,8 @@ for(const contract of ['Ranking de eficiência comercial','winRate*.5','hotRate*
 const proposals = await fs.readFile('deploy/painel/crm/propostas/index.html','utf8');
 for(const contract of ['Proposal Agent','/api/crm/autonomy','/proposal/generate','Aprovar para envio','Lacunas de discovery','Gerar nova versão']) if(!proposals.includes(contract)) failures.push(`proposals: missing ${contract}`);
 const agents = await fs.readFile('deploy/painel/crm/autonomia/index.html','utf8');
-for(const contract of ['Central de Agentes em tempo real','Trabalhando agora','Atividade recente dos agentes','Delivery Agent','Executive Agent','setInterval(load,15000)']) if(!agents.includes(contract)) failures.push(`agent center: missing ${contract}`);
+for(const contract of ['Central de Agentes em tempo real','Trabalhando agora','Atividade recente dos agentes','Customer Success Agent','Finance Agent','active-shadow','setInterval(load,15000)']) if(!agents.includes(contract)) failures.push(`agent center: missing ${contract}`);
+if (!agents.includes("ta==='executive'") || !agents.includes("ta==='delivery'")) failures.push('agent center: Delivery/Executive task mapping missing');
 
 if (failures.length) { console.error('Panel navigation validation failed:'); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
-console.log('Panel navigation OK: Agent Center, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
+console.log('Panel navigation OK: Agent Center with active Delivery/Executive visibility, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
