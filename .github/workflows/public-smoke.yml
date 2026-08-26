@@ -61,9 +61,17 @@ jobs:
             } catch { out[key] = 'failed'; }
           }
           out.homeLeadCapture = /cs-home-lead-form/.test(bodies.home || '') ? 'success' : 'failed';
+          out.homeGuidedJourney = /data-cs-home-journey/.test(bodies.home || '') && /Enviar e ver meu próximo passo/.test(bodies.home || '') && /home-journey\.js/.test(bodies.home || '') ? 'success' : 'failed';
           out.servicesAeo = /cs-services-aeo/.test(bodies.services || '') ? 'success' : 'failed';
           out.assistantBranding = /Code Solution/i.test(bodies.standaloneAssistant || '') && !/\bCodi\b/.test(bodies.standaloneAssistant || '') ? 'success' : 'failed';
           out.publicBrandingLegacyAbsent = Object.values(bodies).every((text) => !/\bCodi\b/.test(text)) ? 'success' : 'failed';
+
+          try {
+            const r = await fetch('https://www.codesolution.com.br/home-journey.js', { signal: AbortSignal.timeout(20000) });
+            const text = await r.text();
+            out.homeJourneyRuntimeHttp = String(r.status);
+            out.homeJourneyRuntime = r.ok && /code-solution-atendente\.victorhugoteixeirasimon6\.workers\.dev/.test(text) && /fetch\(API \+ '\/lead'/.test(text) && /generate_lead/.test(text) && /site_home_journey/.test(text) ? 'success' : 'failed';
+          } catch { out.homeJourneyRuntime = 'failed'; out.homeJourneyRuntimeHttp = ''; }
 
           try {
             const apex = await fetch('https://codesolution.com.br/', { redirect: 'manual', signal: AbortSignal.timeout(20000) });
@@ -132,7 +140,7 @@ jobs:
           } catch { out.panelSecurityAnonymousProtection = 'failed'; }
 
           const required = [
-            'home','services','homeLeadCapture','servicesAeo','staticArticle','diagnosticLanding','standaloneAssistant','privacyPage','sectorsPage','calculatorPage',
+            'home','services','homeLeadCapture','homeGuidedJourney','homeJourneyRuntime','servicesAeo','staticArticle','diagnosticLanding','standaloneAssistant','privacyPage','sectorsPage','calculatorPage',
             'assistantBranding','publicBrandingLegacyAbsent','apexCanonicalRedirect','contentWorkerHealth','attendantWorkerHealth','attendantChat','chatBranding','attendantLeadValidation','crmAnonymousProtection','panelSecurityAnonymousProtection'
           ];
           const failed = required.filter((k) => out[k] !== 'success');
@@ -152,5 +160,6 @@ jobs:
             echo ''
             echo '- Production URL: https://www.codesolution.com.br/'
             echo '- Source: `${{ github.sha }}`'
+            echo '- Guided Home journey + external runtime are mandatory gates.'
             echo '- This workflow is read-only and never commits status files.'
           } >> "$GITHUB_STEP_SUMMARY"
