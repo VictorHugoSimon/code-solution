@@ -74,7 +74,7 @@ jobs:
           code=$(curl -sS --retry 6 --retry-delay 3 -D "$h" -o "$b" -w '%{http_code}' -H 'Origin: https://www.codesolution.com.br' https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health)
           test "$code" = 200
           grep -qi '^access-control-allow-origin: https://www.codesolution.com.br' "$h"
-          node -e "const x=require(process.argv[1]);if(x.ok!==true||x.ready!==true)process.exit(1)" "$b"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));if(x.ok!==true||x.ready!==true)process.exit(1)" "$b"
 
       - name: Sync CRM technical secret to Pages
         env:
