@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-08-26T09:38:16.015Z",
+  "sourceCommit": "f3f579254cbd6dd739c287bc247067776be53a77",
+  "expectedBuild": "autonomous-os-2026-08-26.1",
+  "runtimeReached": true,
+  "runtimeHttp": 200,
+  "runtimeBuild": "autonomous-os-2026-08-26.1",
+  "authFailClosed": true,
+  "unauthenticatedSessionHttp": 401,
+  "invalidLoginHttp": 401,
+  "loginUrl": "https://www.codesolution.com.br/painel/login/",
+  "username": "admin",
+  "bootstrapCredential": "one-time migration on first valid login",
+  "plaintextPasswordStoredInRepository": false
+}
