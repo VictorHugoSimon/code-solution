@@ -20,6 +20,7 @@ const links = [
   ['/painel/', 'Visão', 'visao'],
   ['/painel/crm/', 'CRM', 'crm'],
   ['/painel/crm/autonomia/', 'Autonomia', 'autonomia'],
+  ['/painel/crm/propostas/', 'Propostas', 'propostas'],
   ['/painel/atendimento/', 'Atendimento', 'atendimento'],
   ['/painel/agenda/', 'Agenda', 'agenda'],
   ['/painel/prospeccao/', 'Prospecção', 'prospeccao'],
