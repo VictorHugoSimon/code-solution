@@ -20,7 +20,7 @@ jobs:
   release:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,8 +34,11 @@ jobs:
         run: |
           set -euo pipefail
           node --check robo/growth-worker-runtime.js
+          node --check robo/panel-admin-recovery.js
+          node --check robo/atendente-auth-growth-runtime.js
           node --check scripts/normalize-panel-nav.mjs
           node --check scripts/check-panel-navigation.mjs
+          grep -q 'handlePanelAdminRecovery' robo/atendente-auth-growth-runtime.js
           grep -q 'Access-Control-Allow-Origin' robo/growth-worker-runtime.js
           grep -q 'https://www.codesolution.com.br' robo/growth-worker-runtime.js
           npm run blog:index
@@ -76,6 +79,57 @@ jobs:
           grep -qi '^access-control-allow-origin: https://www.codesolution.com.br' "$h"
           node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));if(x.ok!==true||x.ready!==true)process.exit(1)" "$b"
 
+      - name: Prepare attendant D1 release config
+        working-directory: robo
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 list --json >/tmp/cs-d1.json
+          DB_ID=$(node - <<'NODE'
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/cs-d1.json','utf8'));
+          const a=Array.isArray(x)?x:(x.result||x.databases||[]);
+          const d=a.find(v=>v.name==='code-solution-crm');
+          process.stdout.write(d?.uuid||d?.id||'');
+          NODE
+          )
+          test -n "$DB_ID"
+          cp wrangler-atendente.toml wrangler-atendente.release.toml
+          cat >> wrangler-atendente.release.toml <<EOF
+
+          [[d1_databases]]
+          binding = "CRM_DB"
+          database_name = "code-solution-crm"
+          database_id = "$DB_ID"
+          EOF
+
+      - name: Deploy attendant with admin recovery runtime
+        working-directory: robo
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler@4 deploy --config wrangler-atendente.release.toml
+
+      - name: Sync attendant CRM technical secret
+        working-directory: robo
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 secret put CRM_ADMIN_KEY --config wrangler-atendente.release.toml
+
+      - name: Validate attendant authentication runtime
+        run: |
+          set -euo pipefail
+          ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+          sleep 8
+          test "$(curl -sS --retry 5 --retry-delay 3 -o /tmp/att-health.json -w '%{http_code}' "$ATTENDANT/health")" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/auth/session")" = 401
+          invalid=$(curl -sS -o /tmp/invalid-login.json -w '%{http_code}' -X POST "$ATTENDANT/auth/login" -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"username":"admin","password":"definitely-wrong-password"}')
+          test "$invalid" = 401
+
       - name: Sync CRM technical secret to Pages
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -87,15 +141,19 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$(git rev-parse HEAD)" --commit-message="Panel sidebar and notifications release"
+        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$(git rev-parse HEAD)" --commit-message="Final CRM access and current main release"
 
       - name: Validate live public and protected surfaces
         run: |
           set -euo pipefail
           sleep 12
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/)" = 200
-          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/login/)" = 200
+          login_http=$(curl -sS -o /tmp/login-live.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          test "$login_http" = 200
+          grep -q 'name="username"' /tmp/login-live.html
+          grep -q 'name="password"' /tmp/login-live.html
           h=$(mktemp); curl -sS -D "$h" -o /dev/null https://www.codesolution.com.br/painel/crm/
           test "$(head -n1 "$h" | awk '{print $2}')" = 302
           grep -i '^location:' "$h" | grep -q '/painel/login/'
-          echo 'Current main released: sidebar, human-action badges, lead notifications and Content Worker health fix.'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/auth/session)" = 401
+          echo 'Current main released with individual CRM login and one-time owner recovery.'
