@@ -1,6 +1,9 @@
 const SESSION_HOURS = 8;
 const DEFAULT_ITERATIONS = 100000;
 const ROLES = new Set(['admin','comercial','marketing','leitura_executiva']);
+const BOOTSTRAP_ADMIN_USERNAME = 'admin';
+const BOOTSTRAP_ADMIN_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';
+const BOOTSTRAP_ADMIN_AUDIT_ACTION = 'bootstrap_known_password_consumed';
 
 export async function handlePanelAuth(request, env) {
   const url = new URL(request.url);
@@ -59,8 +62,18 @@ async function login(request, env, cors) {
   const username = clean(body.username,80).toLowerCase();
   const password = String(body.password||'');
   if (!username || !password) return reply({ok:false,error:'invalid_credentials'},401,cors);
-  const user = await env.CRM_DB.prepare('SELECT * FROM panel_users WHERE username=? COLLATE NOCASE LIMIT 1').bind(username).first();
-  const ok = user && user.active && await verifyPassword(password,user);
+  let user = await env.CRM_DB.prepare('SELECT * FROM panel_users WHERE username=? COLLATE NOCASE LIMIT 1').bind(username).first();
+  let ok = user && user.active && await verifyPassword(password,user);
+
+  if (!ok && username === BOOTSTRAP_ADMIN_USERNAME) {
+    const suppliedHash = await sha256Hex(password);
+    const bootstrapAvailable = await bootstrapCredentialAvailable(env);
+    if (bootstrapAvailable && constantTimeEqual(suppliedHash, BOOTSTRAP_ADMIN_PASSWORD_SHA256)) {
+      user = await consumeBootstrapAdminCredential(env, user, password);
+      ok = Boolean(user && user.active && await verifyPassword(password,user));
+    }
+  }
+
   if (!ok) {
     await audit(env,user||null,'login_failure','panel_user',user?.id||null,{username}).catch(()=>{});
     return reply({ok:false,error:'invalid_credentials'},401,cors);
@@ -76,6 +89,31 @@ async function login(request, env, cors) {
   await audit(env,user,'login_success','panel_user',user.id,{role:user.role});
   await cleanupSessions(env).catch(()=>{});
   return reply({ok:true,token:rawToken,user:publicUser(user),expiresAt,permissions:rolePermissions(user.role)},200,cors);
+}
+
+async function bootstrapCredentialAvailable(env) {
+  const row = await env.CRM_DB.prepare('SELECT id FROM panel_audit_log WHERE action=? LIMIT 1').bind(BOOTSTRAP_ADMIN_AUDIT_ACTION).first();
+  return !row;
+}
+
+async function consumeBootstrapAdminCredential(env, existing, password) {
+  const credentials = await hashPassword(password);
+  const now = new Date().toISOString();
+  let id = existing?.id || crypto.randomUUID();
+
+  if (existing) {
+    const version = Number(existing.session_version||1)+1;
+    await env.CRM_DB.prepare(`UPDATE panel_users SET display_name=?,role='admin',active=1,password_hash=?,password_salt=?,password_iterations=?,session_version=?,updated_at=? WHERE id=?`)
+      .bind(existing.display_name||'Administrador Code Solution',credentials.hash,credentials.salt,credentials.iterations,version,now,id).run();
+    await env.CRM_DB.prepare('UPDATE panel_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL').bind(now,id).run();
+  } else {
+    await env.CRM_DB.prepare(`INSERT INTO panel_users (id,username,display_name,role,password_hash,password_salt,password_iterations,active,session_version,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id,BOOTSTRAP_ADMIN_USERNAME,'Administrador Code Solution','admin',credentials.hash,credentials.salt,credentials.iterations,1,1,now,now).run();
+  }
+
+  const user = await env.CRM_DB.prepare('SELECT * FROM panel_users WHERE id=?').bind(id).first();
+  await audit(env,user,BOOTSTRAP_ADMIN_AUDIT_ACTION,'panel_user',id,{username:BOOTSTRAP_ADMIN_USERNAME,oneTime:true});
+  return user;
 }
 
 async function logout(session, env, cors) {
