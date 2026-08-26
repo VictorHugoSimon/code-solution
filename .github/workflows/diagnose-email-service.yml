@@ -1,0 +1,79 @@
+name: Diagnose Cloudflare Email Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-email-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect Email Service safely
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TARGET_EMAIL: victorhugoteixeirasimon6@gmail.com
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/email-service docs
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+          zone_http=$(curl -sS -o /tmp/email-service/zones.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=codesolution.com.br&account.id=${CLOUDFLARE_ACCOUNT_ID}")
+          zone_id=$(node -e "const x=require('/tmp/email-service/zones.json');process.stdout.write((x.result&&x.result[0]&&x.result[0].id)||'')")
+
+          sending_http=0
+          addresses_http=0
+          if [ -n "$zone_id" ]; then
+            sending_http=$(curl -sS -o /tmp/email-service/sending.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/email/sending/subdomains")
+          else
+            printf '{"success":false,"result":[]}' >/tmp/email-service/sending.json
+          fi
+          addresses_http=$(curl -sS -o /tmp/email-service/addresses.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/email/routing/addresses")
+
+          ZONE_HTTP="$zone_http" SENDING_HTTP="$sending_http" ADDRESSES_HTTP="$addresses_http" ZONE_ID="$zone_id" TARGET_EMAIL="$TARGET_EMAIL" node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return {}}};
+          const zones=read('/tmp/email-service/zones.json');
+          const sending=read('/tmp/email-service/sending.json');
+          const addresses=read('/tmp/email-service/addresses.json');
+          const sendRows=Array.isArray(sending.result)?sending.result:[];
+          const addressRows=Array.isArray(addresses.result)?addresses.result:[];
+          const target=addressRows.find(a=>String(a.email||'').toLowerCase()===String(e.TARGET_EMAIL||'').toLowerCase());
+          const sendingDomain=sendRows.find(s=>s.enabled===true && (s.name==='codesolution.com.br'||s.name==='*.codesolution.com.br'));
+          const out={
+            checkedAt:new Date().toISOString(),
+            accountId:e.CLOUDFLARE_ACCOUNT_ID||'',
+            zoneId:e.ZONE_ID||'',
+            zoneHttp:Number(e.ZONE_HTTP||0),
+            zoneApiSuccess:zones.success===true,
+            sendingHttp:Number(e.SENDING_HTTP||0),
+            sendingApiSuccess:sending.success===true,
+            sendingDomainEnabled:Boolean(sendingDomain),
+            sendingDomains:sendRows.map(s=>({name:s.name||'',enabled:s.enabled===true,tag:s.tag||''})),
+            addressesHttp:Number(e.ADDRESSES_HTTP||0),
+            addressesApiSuccess:addresses.success===true,
+            targetEmail:e.TARGET_EMAIL||'',
+            recipientExists:Boolean(target),
+            recipientVerified:Boolean(target&&target.verified),
+            recipientVerificationState:target?(target.verified?'verified':'pending'):'missing',
+            permissionReady:{sendingRead:Number(e.SENDING_HTTP||0)===200,addressesRead:Number(e.ADDRESSES_HTTP||0)===200}
+          };
+          fs.writeFileSync('docs/email-service-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Persist Email Service status
+        run: |
+          git config user.name "Code Solution Email Service Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/email-service-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record Cloudflare Email Service status"
+          git pull --rebase origin main
+          git push origin HEAD:main
