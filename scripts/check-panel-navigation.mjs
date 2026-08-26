@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 
 const panels = [
-  'deploy/painel/index.html','deploy/painel/crm/index.html','deploy/painel/crm/autonomia/index.html','deploy/painel/atendimento/index.html','deploy/painel/agenda/index.html',
+  'deploy/painel/index.html','deploy/painel/crm/index.html','deploy/painel/crm/autonomia/index.html','deploy/painel/crm/propostas/index.html','deploy/painel/atendimento/index.html','deploy/painel/agenda/index.html',
   'deploy/painel/prospeccao/index.html','deploy/painel/marketing/index.html','deploy/painel/inteligencia/index.html','deploy/painel/growth/index.html',
   'deploy/painel/relatorios/index.html','deploy/painel/relatorios/saude/index.html','deploy/painel/usuarios/index.html','deploy/painel/conta/index.html',
 ];
@@ -39,6 +39,8 @@ const marketing = await fs.readFile('deploy/painel/marketing/index.html','utf8')
 for(const contract of ['data-cs-marketing-acquisition="1"','data-cs-campaign-efficiency="1"']) if(!marketing.includes(contract)) failures.push(`marketing: missing ${contract}`);
 const efficiency = await fs.readFile('deploy/painel/marketing/campaign-efficiency.js','utf8');
 for(const contract of ['Ranking de eficiência comercial','winRate*.5','hotRate*.3','avgScore*.2']) if(!efficiency.includes(contract)) failures.push(`campaign efficiency: missing ${contract}`);
+const proposals = await fs.readFile('deploy/painel/crm/propostas/index.html','utf8');
+for(const contract of ['Proposal Agent','/api/crm/autonomy','/proposal/generate','Aprovar para envio','Lacunas de discovery','Gerar nova versão']) if(!proposals.includes(contract)) failures.push(`proposals: missing ${contract}`);
 
 if (failures.length) { console.error('Panel navigation validation failed:'); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
-console.log('Panel navigation OK: all modules, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
+console.log('Panel navigation OK: all modules, Proposal Agent, operation health, campaign efficiency, governance UI, and lead deep-links validated.');
