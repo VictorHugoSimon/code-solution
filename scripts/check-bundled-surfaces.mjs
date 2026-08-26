@@ -11,7 +11,7 @@ const checks = [
       'id="cs-home-lead"',
       'id="cs-home-lead-form"',
       'data-cs-home-journey',
-      'Enviar e ver meu próximo passo',
+      'Enviar formulário',
       'data-cs-success',
       'name="consent"',
       'href="/privacidade/"',
@@ -39,6 +39,7 @@ for (const spec of checks) {
   const template = readTemplate(html, spec.file);
   if (template === null) continue;
   for (const needle of spec.inner) if (!template.includes(needle)) failures.push(`${spec.file}: bundled template missing ${needle}`);
+  if (spec.file === 'deploy/index.html' && /data-wa-link/i.test(template)) failures.push('deploy/index.html: WhatsApp CTA must not exist in guided Home journey');
   const commercialMarkers = (template.match(/COMMERCIAL-EXTENSION:START/g) || []).length;
   const schemaMarkers = (template.match(/SEO-SCHEMA:START/g) || []).length;
   if (commercialMarkers !== 1) failures.push(`${spec.file}: expected 1 commercial marker in bundle, found ${commercialMarkers}`);
@@ -52,16 +53,18 @@ for (const needle of [
   "window.gtag('event', 'generate_lead'",
   "source: q.get('utm_source') || 'site_home_journey'",
   "root.querySelector('[data-protocol]')",
+  'Enviar formulário',
 ]) {
   if (!journeyRuntime.includes(needle)) failures.push(`deploy/home-journey.js: missing ${needle}`);
 }
+if (/data-wa-link/i.test(journeyRuntime)) failures.push('deploy/home-journey.js: runtime still depends on WhatsApp CTA');
 
 if (failures.length) {
   console.error('Bundled surface validation failed:');
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Bundled surfaces OK: commercial UI, AEO, guided Home journey, CRM capture and analytics runtime verified.');
+console.log('Bundled surfaces OK: form-first Home conversion, CRM capture, AEO and analytics runtime verified.');
 
 function readTemplate(html, file) {
   const match = html.match(/<script type="__bundler\/template">([\s\S]*?)<\/script>/);
