@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 
+// CRM workspace release 2026-08-26.1
 const path='deploy/painel/crm/index.html';
 let html=await fs.readFile(path,'utf8');
 const scripts=[
