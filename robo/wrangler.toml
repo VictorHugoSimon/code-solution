@@ -22,4 +22,4 @@ binding = "AI"
 AI_MODEL = "llama-3.1-8b-instant"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 
-# release-trigger: panel-sidebar-content-health-2026-08-26
+# release-trigger: panel-sidebar-content-health-2026-08-26-v3
