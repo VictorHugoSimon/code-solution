@@ -1,0 +1,101 @@
+name: Release current main after health watch
+
+on:
+  workflow_run:
+    workflows: ["Code Solution production health watch"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-current-main-after-health
+  cancel-in-progress: true
+
+env:
+  EXPECTED_ACCOUNT: cad25fe6c91871bbafb58236cf9b9b81
+  PROJECT: codesolution-site
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate current main implementation
+        run: |
+          set -euo pipefail
+          node --check robo/growth-worker-runtime.js
+          node --check scripts/normalize-panel-nav.mjs
+          node --check scripts/check-panel-navigation.mjs
+          grep -q 'Access-Control-Allow-Origin' robo/growth-worker-runtime.js
+          grep -q 'https://www.codesolution.com.br' robo/growth-worker-runtime.js
+          npm run blog:index
+          npm run blog:static
+          npm run pages:prepare
+          npm run check:panel-nav
+          npm run check:bundled-surfaces
+          grep -q 'class="cs-sidebar"' deploy/painel/crm/autonomia/index.html
+          grep -q 'id="csBell"' deploy/painel/crm/autonomia/index.html
+          grep -q 'data-cs-action="crm"' deploy/painel/crm/autonomia/index.html
+          grep -q 'cs_seen_new_leads_v1' deploy/painel/crm/autonomia/index.html
+
+      - name: Validate personal Cloudflare credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_ACCOUNT"
+
+      - name: Deploy Content Worker health fix
+        working-directory: robo
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler@4 deploy --config wrangler.toml
+
+      - name: Verify Content Worker browser health access
+        run: |
+          set -euo pipefail
+          sleep 8
+          h=$(mktemp); b=$(mktemp)
+          code=$(curl -sS --retry 6 --retry-delay 3 -D "$h" -o "$b" -w '%{http_code}' -H 'Origin: https://www.codesolution.com.br' https://code-solution-robo.victorhugoteixeirasimon6.workers.dev/health)
+          test "$code" = 200
+          grep -qi '^access-control-allow-origin: https://www.codesolution.com.br' "$h"
+          node -e "const x=require(process.argv[1]);if(x.ok!==true||x.ready!==true)process.exit(1)" "$b"
+
+      - name: Sync CRM technical secret to Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name="$PROJECT"
+
+      - name: Deploy current main Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler@4 pages deploy deploy --project-name="$PROJECT" --commit-hash="$(git rev-parse HEAD)" --commit-message="Panel sidebar and notifications release"
+
+      - name: Validate live public and protected surfaces
+        run: |
+          set -euo pipefail
+          sleep 12
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/)" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/painel/login/)" = 200
+          h=$(mktemp); curl -sS -D "$h" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          test "$(head -n1 "$h" | awk '{print $2}')" = 302
+          grep -i '^location:' "$h" | grep -q '/painel/login/'
+          echo 'Current main released: sidebar, human-action badges, lead notifications and Content Worker health fix.'
