@@ -1,3 +1,5 @@
+import { discoverProposalCandidates, generateProposalDraft, getProposal, listProposals, syncProposalApproval, updateProposalDraft } from './proposal-agent.js';
+
 const CLOSED_LEAD_STATUSES = new Set(['ganho', 'perdido', 'arquivado']);
 
 export const AUTONOMY_AGENTS = Object.freeze([
@@ -6,7 +8,7 @@ export const AUTONOMY_AGENTS = Object.freeze([
   { id: 'prospecting', name: 'Prospecção B2B', domain: 'growth', autonomy: 'prepare-only-external', status: 'active' },
   { id: 'content', name: 'Conteúdo & Demanda', domain: 'marketing', autonomy: 'prepare-only-external', status: 'active' },
   { id: 'reliability', name: 'Confiabilidade', domain: 'production', autonomy: 'monitor-and-alert', status: 'active-external-watch' },
-  { id: 'proposal', name: 'Propostas', domain: 'commercial', autonomy: 'approval-required', status: 'planned' },
+  { id: 'proposal', name: 'Propostas', domain: 'commercial', autonomy: 'draft-auto-send-approval', status: 'active' },
   { id: 'delivery', name: 'Delivery', domain: 'projects', autonomy: 'approval-required', status: 'planned' },
 ]);
 
@@ -21,6 +23,35 @@ export async function handleAutonomyApi(request, env) {
   if (url.pathname === '/crm/autonomy/summary' && request.method === 'GET') return autonomySummary(env, cors);
   if (url.pathname === '/crm/autonomy/tasks' && request.method === 'GET') return listTasks(request, env, cors);
   if (url.pathname === '/crm/autonomy/approvals' && request.method === 'GET') return listApprovals(request, env, cors);
+  if (url.pathname === '/crm/autonomy/proposals' && request.method === 'GET') {
+    const proposals = await listProposals(env, {
+      status: url.searchParams.get('status'),
+      leadId: url.searchParams.get('leadId'),
+      limit: url.searchParams.get('limit'),
+    });
+    return respond({ ok: true, proposals }, 200, cors);
+  }
+  if (url.pathname === '/crm/autonomy/proposal/generate' && request.method === 'POST') {
+    const body = await readJson(request);
+    const result = await generateProposalDraft(env, body.leadId, { force: body.force === true, createdBy: 'panel-admin' });
+    const approvalTaskCreated = result.proposal ? await ensureProposalApprovalTask(env, result.proposal, new Date().toISOString()) : false;
+    return respond({ ok: true, ...result, approvalTaskCreated }, 200, cors);
+  }
+  const proposalMatch = url.pathname.match(/^\/crm\/autonomy\/proposal\/([^/]+)$/);
+  if (proposalMatch && request.method === 'GET') {
+    const proposal = await getProposal(env, decodeURIComponent(proposalMatch[1]));
+    return proposal ? respond({ ok: true, proposal }, 200, cors) : respond({ ok: false, error: 'not_found' }, 404, cors);
+  }
+  if (proposalMatch && request.method === 'PATCH') {
+    try {
+      const proposal = await updateProposalDraft(env, decodeURIComponent(proposalMatch[1]), await readJson(request), 'panel-admin');
+      return respond({ ok: true, proposal }, 200, cors);
+    } catch (error) {
+      const code = String(error?.message || error);
+      const status = code === 'proposal_not_found' ? 404 : code === 'proposal_not_editable' ? 409 : 400;
+      return respond({ ok: false, error: code }, status, cors);
+    }
+  }
   if (url.pathname === '/crm/autonomy/run' && request.method === 'POST') {
     const result = await runAutonomousOrchestrator(env, { trigger: 'manual' });
     return respond({ ok: true, ...result }, 200, cors);
@@ -62,11 +93,12 @@ export async function runAutonomousOrchestrator(env, { trigger = 'scheduled_30m'
 }
 
 async function discoverWork(env) {
-  const [alertsResult, leadsResult, accountsResult, contentResult] = await Promise.all([
+  const [alertsResult, leadsResult, accountsResult, contentResult, proposalLeads] = await Promise.all([
     env.CRM_DB.prepare("SELECT id,lead_id,alert_type,severity,title,detail,owner,due_at FROM crm_alerts WHERE status='open' ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, created_at ASC LIMIT 100").all(),
     env.CRM_DB.prepare("SELECT id,name,company,status,score,temperature,owner,next_action,next_action_due FROM leads WHERE status NOT IN ('ganho','perdido','arquivado') AND (temperature='quente' OR score>=75) ORDER BY score DESC, created_at ASC LIMIT 100").all(),
     env.CRM_DB.prepare("SELECT id,company,segment,score,priority,status,outreach_angle,suggested_message,source_url FROM growth_accounts WHERE score>=75 AND status IN ('novo','qualificar') ORDER BY score DESC, updated_at ASC LIMIT 100").all(),
     env.CRM_DB.prepare("SELECT id,channel,title,body,cta,status,scheduled_for FROM growth_content WHERE status='pronto' ORDER BY created_at ASC LIMIT 100").all(),
+    discoverProposalCandidates(env, 50),
   ]);
   const work = [];
 
@@ -124,6 +156,16 @@ async function discoverWork(env) {
       risk: 'high', approvalRequired: true, priority: content.scheduled_for ? 85 : 70,
     });
   }
+
+  for (const lead of proposalLeads || []) {
+    work.push({
+      uniqueKey: `proposal:${lead.id}:${lead.updated_at || 'current'}:draft`,
+      agent: 'proposal', actionType: 'generate_proposal_draft', entityType: 'lead', entityId: lead.id,
+      title: `Gerar draft de proposta: ${lead.company || lead.name || lead.id}`,
+      payload: { leadId: lead.id, company: lead.company, score: lead.score, owner: lead.owner },
+      risk: 'low', approvalRequired: false, priority: Math.max(82, Number(lead.score || 0)),
+    });
+  }
   return work;
 }
 
@@ -157,6 +199,7 @@ async function executeSafeTasks(env) {
       if (task.action_type === 'qualify_prospect') outcome = await qualifyProspect(env, task, payload);
       else if (task.action_type === 'prioritize_hot_lead') outcome = await ensureLeadTask(env, task, payload, true);
       else if (task.action_type === 'ensure_sales_action') outcome = await ensureLeadTask(env, task, payload, false);
+      else if (task.action_type === 'generate_proposal_draft') outcome = await generateProposalForTask(env, task, payload);
       else throw new Error(`unsupported_safe_action:${task.action_type}`);
       const done = new Date().toISOString();
       await env.CRM_DB.prepare("UPDATE autonomy_tasks SET status='completed',completed_at=?,updated_at=?,error_text=NULL WHERE id=?")
@@ -170,6 +213,24 @@ async function executeSafeTasks(env) {
     }
   }
   return executed;
+}
+
+async function generateProposalForTask(env, task, payload) {
+  const leadId = payload.leadId || task.entity_id;
+  const result = await generateProposalDraft(env, leadId, { createdBy: 'proposal-agent' });
+  const approvalTaskCreated = result.proposal ? await ensureProposalApprovalTask(env, result.proposal, new Date().toISOString()) : false;
+  return { proposalId: result.proposal?.id || null, leadId, reused: result.reused === true, approvalTaskCreated, generationMode: result.proposal?.generationMode || null };
+}
+
+async function ensureProposalApprovalTask(env, proposal, now) {
+  if (!proposal?.id) return false;
+  return enqueueTask(env, {
+    uniqueKey: `proposal:${proposal.id}:send-approval`,
+    agent: 'proposal', actionType: 'proposal_send', entityType: 'crm_proposal', entityId: proposal.id,
+    title: `Revisar e aprovar proposta v${proposal.version}: ${proposal.title}`,
+    payload: { proposalId: proposal.id, leadId: proposal.leadId, version: proposal.version, title: proposal.title },
+    risk: 'high', approvalRequired: true, priority: 95,
+  }, now);
 }
 
 async function qualifyProspect(env, task, payload) {
@@ -208,35 +269,48 @@ async function patchApproval(request, env, cors) {
   const approval = await env.CRM_DB.prepare('SELECT * FROM autonomy_approvals WHERE id=?').bind(id).first();
   if (!approval) return respond({ ok: false, error: 'not_found' }, 404, cors);
   if (approval.status !== 'pending') return respond({ ok: false, error: 'approval_already_decided' }, 409, cors);
+  const task = await env.CRM_DB.prepare('SELECT * FROM autonomy_tasks WHERE id=?').bind(approval.task_id).first();
+  if (!task) return respond({ ok: false, error: 'task_not_found' }, 404, cors);
   const now = new Date().toISOString();
   const note = clean(body.note, 1200);
+
+  let proposal = null;
+  if (task.action_type === 'proposal_send' && task.entity_type === 'crm_proposal') {
+    try {
+      proposal = await syncProposalApproval(env, task.entity_id, decision, note, 'panel-admin');
+    } catch (error) {
+      return respond({ ok: false, error: cleanError(error) }, 409, cors);
+    }
+  }
+
   await env.CRM_DB.prepare('UPDATE autonomy_approvals SET status=?,decided_by=?,note=?,decided_at=? WHERE id=?')
     .bind(decision, 'panel-admin', note || null, now, id).run();
   await env.CRM_DB.prepare('UPDATE autonomy_tasks SET status=?,updated_at=? WHERE id=?')
     .bind(decision, now, approval.task_id).run();
-  const task = await env.CRM_DB.prepare('SELECT * FROM autonomy_tasks WHERE id=?').bind(approval.task_id).first();
-  await recordDecision(env, approval.task_id, task?.agent || 'orchestrator', `human_${decision}`, note || `Ação ${decision} pelo administrador.`, 1, 'human_gate', { approvalId: id });
-  return respond({ ok: true, approval: { ...approval, status: decision, decidedAt: now }, taskStatus: decision }, 200, cors);
+  await recordDecision(env, approval.task_id, task.agent || 'orchestrator', `human_${decision}`, note || `Ação ${decision} pelo administrador.`, 1, 'human_gate', { approvalId: id, proposalId: proposal?.id || null });
+  return respond({ ok: true, approval: { ...approval, status: decision, decidedAt: now }, taskStatus: decision, proposal }, 200, cors);
 }
 
 async function autonomySummary(env, cors) {
-  const [goals, taskCounts, pending, runs, tasks] = await Promise.all([
+  const [goals, taskCounts, pending, runs, tasks, proposalCounts] = await Promise.all([
     env.CRM_DB.prepare("SELECT goal_key,name,domain,target_json,status,priority FROM autonomy_goals WHERE status='active' ORDER BY priority DESC").all(),
     env.CRM_DB.prepare('SELECT status,COUNT(*) count FROM autonomy_tasks GROUP BY status').all(),
     env.CRM_DB.prepare("SELECT a.id approval_id,a.task_id,a.created_at,t.agent,t.action_type,t.entity_type,t.entity_id,t.title,t.risk_level,t.priority,t.payload_json FROM autonomy_approvals a JOIN autonomy_tasks t ON t.id=a.task_id WHERE a.status='pending' ORDER BY t.priority DESC,a.created_at ASC LIMIT 100").all(),
     env.CRM_DB.prepare('SELECT * FROM autonomy_runs ORDER BY started_at DESC LIMIT 12').all(),
     env.CRM_DB.prepare("SELECT id,agent,action_type,entity_type,entity_id,title,risk_level,approval_required,status,priority,created_at,updated_at,completed_at,error_text FROM autonomy_tasks ORDER BY created_at DESC LIMIT 30").all(),
+    env.CRM_DB.prepare('SELECT status,COUNT(*) count FROM crm_proposals GROUP BY status').all(),
   ]);
   return respond({
     ok: true,
     agents: AUTONOMY_AGENTS,
     goals: (goals.results || []).map((x) => ({ ...x, target: parseJson(x.target_json) })),
     taskCounts: Object.fromEntries((taskCounts.results || []).map((x) => [x.status, Number(x.count || 0)])),
+    proposalCounts: Object.fromEntries((proposalCounts.results || []).map((x) => [x.status, Number(x.count || 0)])),
     pendingApprovals: (pending.results || []).map(mapApprovalRow),
     recentRuns: runs.results || [],
     recentTasks: tasks.results || [],
     policy: {
-      autoExecute: ['internal_crm_task', 'internal_prospect_qualification', 'monitoring', 'analytics'],
+      autoExecute: ['internal_crm_task', 'internal_prospect_qualification', 'proposal_draft_generation', 'monitoring', 'analytics'],
       approvalRequired: ['external_message', 'content_publish', 'proposal_send', 'discount', 'financial_commitment', 'destructive_change'],
       failMode: 'fail_closed',
     },
