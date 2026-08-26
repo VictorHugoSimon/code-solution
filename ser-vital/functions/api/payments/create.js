@@ -25,20 +25,21 @@ export async function onRequestPost({request,env}){
   const externalReference=`sv-${paymentId}`;
   const origin=new URL(request.url).origin;
   const base=(env.ASAAS_BASE_URL||'https://api-sandbox.asaas.com/v3').replace(/\/$/,'');
+  const isSandbox=base.includes('api-sandbox.asaas.com');
   const payload={
     billingTypes:['PIX','CREDIT_CARD'],
     chargeTypes:['DETACHED'],
     minutesToExpire:60,
     externalReference,
     callback:{successUrl:`${origin}/pagamento-sucesso.html`,cancelUrl:`${origin}/pagamento-cancelado.html`,expiredUrl:`${origin}/pagamento-expirado.html`},
-    items:[{name:item.name,description:item.description,quantity:1,value:item.value}]
+    items:[{externalReference:`service-${leadId}`,name:item.name,description:item.description,quantity:1,value:item.value}]
   };
-  if(lead.name||lead.email||lead.phone){payload.customerData={name:lead.name||undefined,email:lead.email||undefined,phone:lead.phone||undefined}}
 
   const res=await fetch(`${base}/checkouts`,{method:'POST',headers:{'content-type':'application/json','accept':'application/json','access_token':env.ASAAS_API_KEY},body:JSON.stringify(payload)});
   const data=await res.json().catch(()=>({}));
   if(!res.ok)return json({error:'Falha ao criar checkout Asaas.',provider_status:res.status,provider_response:data},502);
-  const checkoutUrl=data.link||data.url||data.checkoutUrl||'';
+  const fallbackUrl=data.id?(isSandbox?`https://sandbox.asaas.com/checkoutSession/show/${encodeURIComponent(data.id)}`:`https://asaas.com/checkoutSession/show?id=${encodeURIComponent(data.id)}`):'';
+  const checkoutUrl=data.link||data.url||data.checkoutUrl||fallbackUrl;
   if(!data.id||!checkoutUrl)return json({error:'Resposta do provedor sem checkout utilizável.',provider_response:data},502);
   const now=new Date().toISOString();
   await env.DB.prepare(`INSERT INTO payments (id,created_at,updated_at,lead_id,provider,external_id,external_reference,checkout_url,amount,currency,status,payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
