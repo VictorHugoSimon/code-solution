@@ -2,6 +2,7 @@ import attendantRuntime from './atendente-worker-runtime.js';
 import { handleGrowthApi } from './growth-api.js';
 import { handleCommercialApi, afterLeadCreated, beforeLeadPatch, afterLeadPatched, runCommercialAutomation } from './crm-automation.js';
 import { handleAcquisitionInsights } from './acquisition-insights.js';
+import { handleProspectingActivity } from './prospecting-activity.js';
 
 const EVENT_NAMES = new Set([
   'organic_landing_view',
@@ -25,6 +26,11 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const cors = corsHeaders(request, env);
+
+    if (url.pathname.startsWith('/crm/prospecting/')) {
+      const response = await handleProspectingActivity(request, env, cors);
+      if (response) return response;
+    }
 
     if (url.pathname.startsWith('/crm/acquisition/')) {
       const response = await handleAcquisitionInsights(request, env, cors);
