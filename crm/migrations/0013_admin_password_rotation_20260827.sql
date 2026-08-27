@@ -1,6 +1,7 @@
 -- Code Solution admin credential rotation — 2026-08-27
 -- Owner-approved reset after login access troubleshooting.
 -- Plaintext password is NOT stored here; only PBKDF2-SHA256 output + random salt.
+-- Deployment retry after strengthening the schema gate to accept PBKDF2 >= 180000 iterations.
 
 UPDATE panel_users
 SET
