@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-08-27T13:54:49.985Z",
+  "sourceCommit": "05c66f48b076b0a702f42ce6c5ed2340d2e9a53f",
+  "rearm": "success",
+  "username": "admin",
+  "credentialState": "bootstrap-ready",
+  "note": "No human password was written to repository, issue, log, or status file."
+}
