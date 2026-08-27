@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-08-27T15:13:10.968Z",
+  "sourceCommit": "53ef991ebb3554dd6a8bab8062bcf7d17e955ccd",
+  "status": "success",
+  "apiHttp": 200,
+  "unauthenticatedHttp": 401,
+  "channel": "linkedin",
+  "owner": "admin",
+  "rows": 0,
+  "dailyTargets": {
+    "connections": 15,
+    "interactions": 10,
+    "firstMessages": 5,
+    "followups": 5,
+    "contentPosts": 1,
+    "meetingsBooked": 1
+  },
+  "weeklyTargets": {
+    "connections": 75,
+    "interactions": 50,
+    "firstMessages": 25,
+    "followups": 25,
+    "contentPosts": 5,
+    "meetingsBooked": 2
+  },
+  "d1TableReachable": true,
+  "failClosed": true,
+  "panelUrl": "https://www.codesolution.com.br/painel/prospeccao/"
+}
