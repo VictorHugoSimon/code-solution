@@ -1,3 +1,4 @@
+# Admin access diagnostic marker: 2026-08-27 recovery validation
 name: Diagnose admin login state
 
 on:
@@ -52,8 +53,11 @@ jobs:
           const audits=rows('/tmp/admin-audit.json');
           const u=users[0]||null;
           const recovery=audits.find(x=>x.action==='admin_recovery_2026_08_27_existing_password_consumed');
+          const bootstrap=audits.find(x=>x.action==='bootstrap_known_password_consumed');
           const loginSuccess=audits.find(x=>x.action==='login_success');
           const loginFailure=audits.find(x=>x.action==='login_failure');
+          const recoveryConsumed=Number(recovery?.total||0)>0;
+          const bootstrapConsumed=Number(bootstrap?.total||0)>0;
           const out={
             checkedAt:new Date().toISOString(),
             username:'admin',
@@ -64,13 +68,16 @@ jobs:
             sessionVersion:Number(u?.session_version||0),
             lastLoginAt:u?.last_login_at||null,
             updatedAt:u?.updated_at||null,
-            recoveryConsumed:Number(recovery?.total||0)>0,
+            recoveryConsumed,
             recoveryLastAt:recovery?.last_at||null,
+            bootstrapConsumed,
+            bootstrapLastAt:bootstrap?.last_at||null,
             loginSuccessCount:Number(loginSuccess?.total||0),
             lastLoginSuccessAt:loginSuccess?.last_at||null,
             loginFailureCount:Number(loginFailure?.total||0),
             lastLoginFailureAt:loginFailure?.last_at||null,
-            credentialState:Number(recovery?.total||0)>0?'persistent-admin':'recovery-ready',
+            knownRecoveryCredentialAvailable:!recoveryConsumed && !bootstrapConsumed,
+            credentialState:(recoveryConsumed||bootstrapConsumed)?'persistent-admin':'recovery-ready',
             plaintextPasswordStored:false
           };
           fs.mkdirSync('docs',{recursive:true});
