@@ -3,15 +3,6 @@ const CANONICAL_HOST = 'www.codesolution.com.br';
 const SESSION_COOKIE = 'cs_panel_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
-
-
-
-
-
-
-
-
-
 // SEO-LEGACY-MIGRATION:START
 const LEGACY_REDIRECTS = new Map([
   ['/portfolio-category/website/','/servicos/'],
@@ -44,17 +35,9 @@ export default {
     if (legacyTarget) return Response.redirect(new URL(legacyTarget, url.origin).toString(), 301);
     // SEO-LEGACY-ROUTE:END
 
-
-
-
-
-
-
-
-
-
     if (url.pathname === '/painel/login' || url.pathname === '/painel/login/') return handleLogin(request, url);
     if (url.pathname === '/painel/logout' || url.pathname === '/painel/logout/') return handleLogout(request, url);
+    if (url.pathname === '/auth/login' || url.pathname === '/auth/login/') return proxyPublicAuthLogin(request, url);
 
     const isPanel = url.pathname === '/painel' || url.pathname.startsWith('/painel/');
     const isCrmApi = url.pathname === '/api/crm' || url.pathname.startsWith('/api/crm/');
@@ -124,6 +107,22 @@ async function handleLogin(request, url) {
       'X-Robots-Tag':'noindex, nofollow, noarchive',
     },
   });
+}
+
+async function proxyPublicAuthLogin(request, incomingUrl) {
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', {
+      status:405,
+      headers:{Allow:'POST','Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow, noarchive'},
+    });
+  }
+  const upstream = new URL('/auth/login' + incomingUrl.search, ATTENDANT);
+  const headers = new Headers();
+  const contentType = request.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
+  headers.set('origin', 'https://www.codesolution.com.br');
+  const response = await fetch(upstream, {method:'POST',headers,body:request.body,redirect:'manual'});
+  return secureResponse(response,{panel:true});
 }
 
 async function handleLogout(request, url) {
