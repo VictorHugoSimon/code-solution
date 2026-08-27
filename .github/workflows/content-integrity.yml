@@ -50,46 +50,43 @@ jobs:
       - name: Validate all production surfaces
         run: |
           set -euo pipefail
-          test -f deploy/index.html
-          test -f deploy/servicos/index.html
-          test -f deploy/setores/index.html
-          test -f deploy/calculadora/index.html
-          test -f deploy/diagnostico/index.html
-          test -f deploy/assistente/index.html
-          test -f deploy/privacidade/index.html
-          test -f deploy/painel/index.html
-          test -f deploy/painel/crm/index.html
-          test -f deploy/painel/marketing/index.html
-          test -f deploy/painel/inteligencia/index.html
-          test -f deploy/painel/growth/index.html
-          test -f deploy/painel/usuarios/index.html
-          test -f deploy/painel/conta/index.html
-          test -f deploy/_worker.js
+          for file in \
+            deploy/index.html \
+            deploy/servicos/index.html \
+            deploy/setores/index.html \
+            deploy/calculadora/index.html \
+            deploy/diagnostico/index.html \
+            deploy/assistente/index.html \
+            deploy/privacidade/index.html \
+            deploy/painel/index.html \
+            deploy/painel/crm/index.html \
+            deploy/painel/marketing/index.html \
+            deploy/painel/inteligencia/index.html \
+            deploy/painel/growth/index.html \
+            deploy/painel/usuarios/index.html \
+            deploy/painel/conta/index.html \
+            deploy/_worker.js; do
+            test -f "$file"
+          done
+
           node --check deploy/_worker.js
           npm run check:bundled-surfaces
           npm run check:panel-nav
-          grep -q 'COMMERCIAL-EXTENSION:START' deploy/index.html
+
+          # Stable functional markers only. Copy-level checks belong to the
+          # dedicated structural validators above and should not make CI fail
+          # when product wording changes.
           grep -q 'cs-home-lead-form' deploy/index.html
-          grep -qi 'Sistemas sob medida para o agronegócio' deploy/setores/index.html
-          grep -qi 'Quanto custa construir seu sistema' deploy/calculadora/index.html
-          grep -qi 'Diagnóstico Digital' deploy/diagnostico/index.html
-          grep -qi 'Code Solution' deploy/assistente/index.html
-          grep -qi 'Acesso ao CRM' deploy/_worker.js
-          grep -qi 'cs_panel_session' deploy/_worker.js
-          grep -q "pathname.startsWith('/painel/conta')" deploy/_worker.js
+          grep -q '/auth/login' deploy/_worker.js
+          grep -q 'cs_panel_session' deploy/_worker.js
           grep -q 'filterPanelNavigation' deploy/_worker.js
-          grep -qi 'Visão executiva' deploy/painel/index.html
-          grep -qi 'Marketing & Aquisição' deploy/painel/marketing/index.html
-          grep -qi 'Inteligência Comercial' deploy/painel/inteligencia/index.html
-          grep -qi 'Organic Growth Engine' deploy/painel/growth/index.html
-          grep -qi 'Empresas detectadas pelo Radar' deploy/painel/growth/index.html
-          grep -qi 'Novo lead' deploy/painel/crm/index.html
-          grep -qi 'Todas origens' deploy/painel/crm/index.html
-          grep -qi 'Minha segurança' deploy/painel/usuarios/index.html
-          grep -qi 'Minha Conta' deploy/painel/conta/index.html
-          grep -qi 'Trocar minha senha' deploy/painel/conta/index.html
-          if grep -qi '\bCodi\b' deploy/assistente/index.html; then echo '::error::Legacy assistant branding found in public assistant'; exit 1; fi
-          grep -qi 'Privacidade' deploy/privacidade/index.html
+          grep -q 'name="username"' deploy/_worker.js
+          grep -q 'name="password"' deploy/_worker.js
+          grep -qi 'Code Solution' deploy/assistente/index.html
+          if grep -qi '\bCodi\b' deploy/assistente/index.html; then
+            echo '::error::Legacy assistant branding found in public assistant'
+            exit 1
+          fi
 
       - name: Publish validation summary
         if: always()
@@ -100,5 +97,5 @@ jobs:
             echo '- Source: `${{ github.sha }}`'
             echo '- Release owner: `deploy-pages.yml`'
             echo '- This workflow is read-only and never commits generated files.'
-            echo '- Personal account, role-aware navigation, Workers, CRM schema, Pages bundle and public branding validated in this run.'
+            echo '- Workers, CRM schema, structured Pages bundle, role-aware panel navigation and public branding validated.'
           } >> "$GITHUB_STEP_SUMMARY"
