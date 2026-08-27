@@ -1,4 +1,4 @@
-# Admin access diagnostic marker: 2026-08-27 recovery validation
+# Admin access diagnostic marker: 2026-08-27 persistent credential validation
 name: Diagnose admin login state
 
 on:
@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,last_login_at,updated_at FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/admin-user.json
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) AS total,MAX(created_at) AS last_at FROM panel_audit_log WHERE username='admin' OR action IN ('admin_recovery_2026_08_27_existing_password_consumed','bootstrap_known_password_consumed','login_success','login_failure') GROUP BY action ORDER BY action;" --json > /tmp/admin-audit.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) AS total,MAX(created_at) AS last_at FROM panel_audit_log WHERE username='admin' OR action IN ('admin_password_recovery_persisted_2026_08_27','admin_recovery_2026_08_27_existing_password_consumed','bootstrap_known_password_consumed','login_success','login_failure') GROUP BY action ORDER BY action;" --json > /tmp/admin-audit.json
 
           node - <<'NODE'
           const fs=require('fs');
@@ -52,10 +52,12 @@ jobs:
           const users=rows('/tmp/admin-user.json');
           const audits=rows('/tmp/admin-audit.json');
           const u=users[0]||null;
+          const persisted=audits.find(x=>x.action==='admin_password_recovery_persisted_2026_08_27');
           const recovery=audits.find(x=>x.action==='admin_recovery_2026_08_27_existing_password_consumed');
           const bootstrap=audits.find(x=>x.action==='bootstrap_known_password_consumed');
           const loginSuccess=audits.find(x=>x.action==='login_success');
           const loginFailure=audits.find(x=>x.action==='login_failure');
+          const persistentCredentialSet=Number(persisted?.total||0)>0;
           const recoveryConsumed=Number(recovery?.total||0)>0;
           const bootstrapConsumed=Number(bootstrap?.total||0)>0;
           const out={
@@ -68,6 +70,8 @@ jobs:
             sessionVersion:Number(u?.session_version||0),
             lastLoginAt:u?.last_login_at||null,
             updatedAt:u?.updated_at||null,
+            persistentCredentialSet,
+            persistentCredentialSetAt:persisted?.last_at||null,
             recoveryConsumed,
             recoveryLastAt:recovery?.last_at||null,
             bootstrapConsumed,
@@ -76,8 +80,8 @@ jobs:
             lastLoginSuccessAt:loginSuccess?.last_at||null,
             loginFailureCount:Number(loginFailure?.total||0),
             lastLoginFailureAt:loginFailure?.last_at||null,
-            knownRecoveryCredentialAvailable:!recoveryConsumed && !bootstrapConsumed,
-            credentialState:(recoveryConsumed||bootstrapConsumed)?'persistent-admin':'recovery-ready',
+            knownCredentialReady:persistentCredentialSet || (!recoveryConsumed && !bootstrapConsumed),
+            credentialState:persistentCredentialSet?'persistent-admin':((recoveryConsumed||bootstrapConsumed)?'persistent-admin':'recovery-ready'),
             plaintextPasswordStored:false
           };
           fs.mkdirSync('docs',{recursive:true});
@@ -92,5 +96,6 @@ jobs:
           git add docs/admin-login-state.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'chore: record admin login state'
+          git reset --hard HEAD
           git pull --rebase origin main
           git push origin HEAD:main
