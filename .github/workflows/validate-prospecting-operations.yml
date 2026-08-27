@@ -1,0 +1,109 @@
+name: Validate prospecting operations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-prospecting-operations.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-prospecting-operations-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ATTENDANT: https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+      CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for prospecting API and D1 migration
+        id: api
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          ok=false
+          http=0
+          for attempt in $(seq 1 36); do
+            http=$(curl -sS --max-time 25 -o /tmp/prospecting.json -w '%{http_code}' \
+              "$ATTENDANT/crm/prospecting/activity?days=7&channel=linkedin&owner=admin" \
+              -H "x-crm-key: $CRM_ADMIN_KEY" || true)
+            echo "attempt=$attempt http=$http"
+            if [ "$http" = 200 ] && node - <<'NODE'
+          const fs=require('fs');
+          try {
+            const x=JSON.parse(fs.readFileSync('/tmp/prospecting.json','utf8'));
+            const good=x.ok===true && x.channel==='linkedin' && Array.isArray(x.rows) &&
+              x.dailyTargets?.connections===15 && x.dailyTargets?.firstMessages===5 &&
+              x.weeklyTargets?.connections===75 && x.weeklyTargets?.meetingsBooked===2;
+            process.exit(good?0:1);
+          } catch { process.exit(1); }
+          NODE
+            then ok=true; break; fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "http=$http" >> "$GITHUB_OUTPUT"
+          test "$ok" = true
+
+      - name: Validate fail-closed access
+        id: security
+        if: steps.api.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          unauth=$(curl -sS --max-time 20 -o /tmp/unauth.json -w '%{http_code}' \
+            "$ATTENDANT/crm/prospecting/activity?days=7&channel=linkedin")
+          test "$unauth" = 401
+          echo "unauth=$unauth" >> "$GITHUB_OUTPUT"
+
+      - name: Persist prospecting operations status
+        if: always()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          API_OK: ${{ steps.api.outputs.ok }}
+          API_HTTP: ${{ steps.api.outputs.http }}
+          SECURITY: ${{ steps.security.outcome }}
+          UNAUTH_HTTP: ${{ steps.security.outputs.unauth }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          let x={};
+          try{x=JSON.parse(fs.readFileSync('/tmp/prospecting.json','utf8'))}catch{}
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            status:e.API_OK==='true'&&e.SECURITY==='success'?'success':'failure',
+            apiHttp:Number(e.API_HTTP||0),
+            unauthenticatedHttp:Number(e.UNAUTH_HTTP||0),
+            channel:x.channel||'linkedin',
+            owner:x.owner||'admin',
+            rows:Array.isArray(x.rows)?x.rows.length:0,
+            dailyTargets:x.dailyTargets||{},
+            weeklyTargets:x.weeklyTargets||{},
+            d1TableReachable:e.API_OK==='true',
+            failClosed:e.SECURITY==='success',
+            panelUrl:'https://www.codesolution.com.br/painel/prospeccao/'
+          };
+          fs.writeFileSync('docs/prospecting-operations-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Growth Validation Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/prospecting-operations-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record prospecting operations status'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce production prospecting API
+        if: always()
+        run: |
+          test '${{ steps.api.outputs.ok }}' = true
+          test '${{ steps.security.outcome }}' = success
