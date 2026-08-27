@@ -1,6 +1,6 @@
 # Code Solution — Roadmap pós-lançamento
 
-Atualizado em 25/08/2026.
+Atualizado em 27/08/2026.
 
 ## Estado atual
 
@@ -112,10 +112,34 @@ Status: **concluída para operação interna**.
 - [x] painel técnico de Saúde da Operação em `/painel/relatorios/saude/`;
 - [x] runbook de incidente e rollback em `docs/RUNBOOK-PRODUCAO.md`.
 
+## v1.6 — Operação orgânica dos primeiros 30 dias
+
+Status: **backend e metas em produção; superfície visual em release controlado**.
+
+- [x] baseline operacional de 30 dias configurado por canal, com LinkedIn como prioridade;
+- [x] metas separadas de resultados observados para não confundir objetivo com performance real;
+- [x] LinkedIn: meta semanal de 50 sessões rastreadas, 4 leads e 1 ganho;
+- [x] API e D1 para registrar execução diária de prospecção;
+- [x] registro de conexões, interações, primeiras mensagens, follow-ups, conteúdo, respostas qualificadas e reuniões;
+- [x] cadência operacional LinkedIn: 15 conexões, 10 interações, 5 primeiras mensagens, 5 follow-ups e 1 conteúdo por dia útil;
+- [x] metas de atividade para 7 dias: 75 conexões, 50 interações, 25 primeiras mensagens, 25 follow-ups, 5 conteúdos e 2 reuniões;
+- [x] playbooks preparados para Agronegócio, Logística e Transporte, Varejo/Distribuição e Processos Corporativos;
+- [x] UTMs por canal/ICP para ligar abordagem → visita → lead → ganho;
+- [x] API de Prospecção validada em Produção com HTTP 200 e fail-closed HTTP 401 sem credencial;
+- [ ] concluir evidência do widget de realizado x meta na superfície publicada de `/painel/prospeccao/`;
+- [ ] iniciar execução humana diária e registrar o realizado;
+- [ ] recalibrar metas semanalmente com base em resposta, reuniões e ganhos observados.
+
+### Regra de leitura das metas
+
+Os números acima são **metas operacionais de lançamento**, não projeções de faturamento nem performance histórica. A primeira recalibração deve ocorrer depois de uma semana completa de execução registrada. Não elevar volume se resposta qualificada e reuniões caírem; a prioridade é qualidade do ICP e avanço no funil.
+
 ## Evidências de fechamento
 
 - `docs/pages-deployment-status.json` — Pages/CRM/identidade/smoke;
 - `docs/acquisition-v13-status.json` — metas por canal e landing pages;
+- `docs/launch-acquisition-goals-status.json` — baseline de aquisição dos primeiros 30 dias;
+- `docs/prospecting-operations-status.json` — D1/API da execução diária e fail-closed;
 - `docs/panel-identity-status.json` — identidade e lifecycle de sessão;
 - `docs/d1-continuity-status.json` — Time Travel/export/restore;
 - `.github/workflows/production-health-watch.yml` — monitor horário;
@@ -134,14 +158,15 @@ Estas integrações não bloqueiam o lançamento nem a operação atual:
 
 ## Próxima prioridade de negócio
 
-Com o produto interno estabilizado, a prioridade deixa de ser infraestrutura e passa a ser **operação comercial e geração de demanda**:
+Com o produto interno estabilizado, a prioridade é **execução comercial e geração de demanda**:
 
-1. configurar metas semanais reais no painel de Marketing;
-2. iniciar prospecção orgânica LinkedIn + conteúdo + cases;
-3. acompanhar visita → lead → reunião → proposta → ganho;
-4. revisar semanalmente ranking de campanhas e origem dos leads;
-5. integrar WhatsApp/e-mail quando as credenciais oficiais forem disponibilizadas;
-6. ativar Meta Pixel e GA4 quando os IDs oficiais forem fornecidos.
+1. concluir o release visual do módulo de execução diária da Prospecção;
+2. executar diariamente a cadência LinkedIn e registrar o realizado no painel;
+3. publicar conteúdo/cases alinhados aos quatro ICPs priorizados;
+4. acompanhar visita → lead → reunião → proposta → ganho;
+5. revisar semanalmente atingimento, resposta qualificada e ranking de campanhas;
+6. integrar WhatsApp/e-mail quando as credenciais oficiais forem disponibilizadas;
+7. ativar Meta Pixel e GA4 quando os IDs oficiais forem fornecidos.
 
 ## Critério de prioridade
 
