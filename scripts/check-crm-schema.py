@@ -18,7 +18,8 @@ required_tables = {
     'leads','lead_events','crm_tasks','crm_alerts','crm_owners','crm_automation_runs',
     'lead_acquisition_links','acquisition_events','panel_users','panel_sessions','panel_audit_log',
     'autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals',
-    'crm_proposals','crm_proposal_events'
+    'crm_proposals','crm_proposal_events','autonomy_agent_controls','delivery_handoffs','executive_briefs',
+    'autonomy_task_retries','autonomy_dead_letters','autonomy_agent_daily_usage','autonomy_policy_versions'
 }
 tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 assert not (required_tables - tables), f'missing tables: {sorted(required_tables - tables)}'
@@ -32,6 +33,12 @@ autonomy_task_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy
 assert {'unique_key','agent','action_type','risk_level','approval_required','status','priority','payload_json'} <= autonomy_task_cols
 autonomy_approval_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy_approvals)')}
 assert {'task_id','status','requested_by','decided_by','note','created_at','decided_at'} <= autonomy_approval_cols
+agent_control_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy_agent_controls)')}
+assert {'agent_id','enabled','shadow_mode','max_tasks_per_run','note','updated_at'} <= agent_control_cols
+retry_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy_task_retries)')}
+assert {'task_id','attempts','max_attempts','status','next_attempt_at','last_error','created_at','updated_at'} <= retry_cols
+dlq_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy_dead_letters)')}
+assert {'task_id','agent','action_type','reason','payload_json','created_at','resolved_at','resolution_note'} <= dlq_cols
 
 proposal_cols = {row[1] for row in conn.execute('PRAGMA table_info(crm_proposals)')}
 assert {
@@ -48,11 +55,18 @@ assert len(admin[2]) == 64 and len(admin[3]) >= 32 and admin[4] == 100000
 
 conn.execute("INSERT INTO panel_audit_log (id,user_id,username,action,created_at) VALUES ('audit-test','panel-admin-primary','admin','schema_test',datetime('now'))")
 assert conn.execute("SELECT count(*) FROM panel_audit_log WHERE action='schema_test'").fetchone()[0] == 1
-assert conn.execute("SELECT count(*) FROM autonomy_goals WHERE status='active'").fetchone()[0] >= 4
+assert conn.execute("SELECT count(*) FROM autonomy_goals WHERE status='active'").fetchone()[0] >= 7
+assert conn.execute("SELECT enabled FROM autonomy_agent_controls WHERE agent_id='__global__'").fetchone()[0] == 1
+assert conn.execute("SELECT count(*) FROM autonomy_agent_controls WHERE agent_id IN ('delivery','executive','governance')").fetchone()[0] == 3
+assert conn.execute("SELECT policy_version FROM autonomy_policy_versions WHERE active=1 ORDER BY created_at DESC LIMIT 1").fetchone()[0] == 'autonomy-policy-2026-08-27.1'
 
 conn.execute("INSERT INTO leads (id,name,whatsapp,need,status,created_at,updated_at) VALUES ('proposal-lead','Teste','5518999999999','Automatizar processo comercial','proposta',datetime('now'),datetime('now'))")
 conn.execute("INSERT INTO crm_proposals (id,lead_id,version,status,approval_status,title,created_at,updated_at) VALUES ('proposal-test','proposal-lead',1,'pending_approval','pending','Proposta teste',datetime('now'),datetime('now'))")
 assert conn.execute("SELECT count(*) FROM crm_proposals WHERE lead_id='proposal-lead' AND status='pending_approval'").fetchone()[0] == 1
 
+conn.execute("INSERT INTO autonomy_tasks (id,unique_key,agent,action_type,title,risk_level,approval_required,status,created_at,updated_at) VALUES ('retry-task','retry-task-key','governance','test_retry','Retry test','low',0,'failed',datetime('now'),datetime('now'))")
+conn.execute("INSERT INTO autonomy_task_retries (task_id,attempts,max_attempts,status,created_at,updated_at) VALUES ('retry-task',1,3,'retrying',datetime('now'),datetime('now'))")
+assert conn.execute("SELECT attempts FROM autonomy_task_retries WHERE task_id='retry-task'").fetchone()[0] == 1
+
 conn.close()
-print('CRM + panel identity + Autonomous OS + Proposal Agent schema contract: OK')
+print('CRM + identity + Autonomous OS + Proposal + Operational Agents + Governance resilience schema contract: OK')
