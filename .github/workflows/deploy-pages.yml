@@ -110,13 +110,18 @@ jobs:
           for path in / /servicos/ /setores/ /calculadora/ /diagnostico/ /assistente/ /privacidade/ /cases/ /cases/sos-truck/ /cases/tonini/ /cases/code-solution/ /sitemap.xml; do
             curl -LfsS --retry 6 --retry-delay 3 "https://www.codesolution.com.br${path}" >/tmp/page.out
           done
-          curl -LfsS https://www.codesolution.com.br/ | grep -q 'cs-home-lead-form'
+
+          curl -LfsS https://www.codesolution.com.br/ >/tmp/home.html
+          grep -q 'cs-home-lead-form' /tmp/home.html
+
           curl -LfsS https://www.codesolution.com.br/assistente/ >/tmp/assistant.html
           grep -qi 'Code Solution' /tmp/assistant.html
           if grep -qi '\bCodi\b' /tmp/assistant.html; then exit 1; fi
-          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'S.O.S Truck'
-          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Tonini'
-          curl -LfsS https://www.codesolution.com.br/cases/ | grep -q 'Code Solution'
+
+          curl -LfsS https://www.codesolution.com.br/cases/ >/tmp/cases.html
+          grep -q 'S.O.S Truck' /tmp/cases.html
+          grep -q 'Tonini' /tmp/cases.html
+          grep -q 'Code Solution' /tmp/cases.html
 
           login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
           test "$login_http" = 200
@@ -125,9 +130,10 @@ jobs:
           grep -q 'name="password"' /tmp/login.html
 
           for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/relatorios/saude/ /painel/usuarios/ /painel/conta/; do
-            h=$(mktemp); curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
+            h=$(mktemp)
+            curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
-            grep -i '^location:' "$h" | grep -q '/painel/login/'
+            grep -qi '^location: .*\/painel\/login\/' "$h"
           done
 
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)" = 401
@@ -135,9 +141,10 @@ jobs:
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://www.codesolution.com.br/api/auth/me/security)" = 401
           test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST https://www.codesolution.com.br/api/auth/me/password -H 'content-type: application/json' --data '{}')" = 401
 
-          h=$(mktemp); curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
+          h=$(mktemp)
+          curl -sS -D "$h" -o /dev/null https://codesolution.com.br/
           test "$(head -n1 "$h" | awk '{print $2}')" = 301
-          grep -i '^location:' "$h" | grep -q '^location: https://www.codesolution.com.br/'
+          grep -qi '^location: https://www.codesolution.com.br/' "$h"
 
       - name: Validate CRM and identity backend
         id: backend
@@ -189,4 +196,4 @@ jobs:
           test "$SMOKE" = success
           test "$BACKEND" = success
 
-# release-trigger: repaired-admin-login-2026-08-26
+# release-trigger: pipe-safe-smoke-2026-08-27
