@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-08-27T17:00:21.318Z",
+  "username": "admin",
+  "userExists": true,
+  "displayName": "Administrador Code Solution",
+  "role": "admin",
+  "active": true,
+  "sessionVersion": 19,
+  "lastLoginAt": "2026-08-26T14:38:25.888Z",
+  "updatedAt": "2026-08-26T14:38:25.888Z",
+  "recoveryConsumed": false,
+  "recoveryLastAt": null,
+  "loginSuccessCount": 4,
+  "lastLoginSuccessAt": "2026-08-26T14:38:26.206Z",
+  "loginFailureCount": 3,
+  "lastLoginFailureAt": "2026-08-26T16:55:14.966Z",
+  "credentialState": "recovery-ready",
+  "plaintextPasswordStored": false
+}
