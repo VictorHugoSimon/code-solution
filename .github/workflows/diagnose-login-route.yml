@@ -17,54 +17,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test public login route without valid credentials
-        id: test
+      - name: Collect public login route diagnostics
         run: |
-          set -euo pipefail
+          set +e
           SITE=https://www.codesolution.com.br
           ATTENDANT=https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+          mkdir -p docs
 
           login_http=$(curl -sS --retry 4 --retry-delay 2 -o /tmp/login.html -w '%{http_code}' "$SITE/painel/login/")
-          test "$login_http" = 200
-          grep -qi 'Acesso ao CRM' /tmp/login.html
-          grep -q 'name="username"' /tmp/login.html
-          grep -q 'name="password"' /tmp/login.html
+          grep -qi 'Acesso ao CRM' /tmp/login.html; login_title=$?
+          grep -q 'name="username"' /tmp/login.html; login_username=$?
+          grep -q 'name="password"' /tmp/login.html; login_password=$?
 
           attendant_http=$(curl -sS -o /tmp/attendant-login.json -w '%{http_code}' "$ATTENDANT/auth/login" -X POST -H 'content-type: application/json' --data '{"username":"__invalid__","password":"__invalid__"}')
-          test "$attendant_http" = 401
-
           site_http=$(curl -sS -o /tmp/site-login.json -w '%{http_code}' "$SITE/auth/login" -X POST -H 'content-type: application/json' --data '{"username":"__invalid__","password":"__invalid__"}')
-          test "$site_http" = 401
-
-          node - <<'NODE'
-          const fs=require('fs');
-          for(const p of ['/tmp/attendant-login.json','/tmp/site-login.json']){
-            const x=JSON.parse(fs.readFileSync(p,'utf8'));
-            if(x.ok!==false || x.error!=='invalid_credentials') throw new Error(`unexpected login rejection contract: ${p}`);
-          }
-          NODE
 
           headers=$(mktemp)
           curl -sS -D "$headers" -o /dev/null "$SITE/painel/crm/"
           panel_http=$(head -n1 "$headers" | awk '{print $2}')
           panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
-          test "$panel_http" = 302
-          echo "$panel_location" | grep -q '/painel/login/'
 
-          mkdir -p docs
-          LOGIN_HTTP="$login_http" ATTENDANT_HTTP="$attendant_http" SITE_HTTP="$site_http" PANEL_HTTP="$panel_http" PANEL_LOCATION="$panel_location" node - <<'NODE'
+          LOGIN_HTTP="$login_http" LOGIN_TITLE="$login_title" LOGIN_USERNAME="$login_username" LOGIN_PASSWORD="$login_password" ATTENDANT_HTTP="$attendant_http" SITE_HTTP="$site_http" PANEL_HTTP="$panel_http" PANEL_LOCATION="$panel_location" node - <<'NODE'
           const fs=require('fs'),e=process.env;
+          function readJson(path){try{return JSON.parse(fs.readFileSync(path,'utf8'))}catch{return null}}
+          const attendant=readJson('/tmp/attendant-login.json');
+          const sameOrigin=readJson('/tmp/site-login.json');
+          const loginFormPresent=e.LOGIN_TITLE==='0' && e.LOGIN_USERNAME==='0' && e.LOGIN_PASSWORD==='0';
+          const attendantContract=Number(e.ATTENDANT_HTTP)===401 && attendant?.ok===false && attendant?.error==='invalid_credentials';
+          const sameOriginContract=Number(e.SITE_HTTP)===401 && sameOrigin?.ok===false && sameOrigin?.error==='invalid_credentials';
+          const panelRedirect=[302,303].includes(Number(e.PANEL_HTTP)) && String(e.PANEL_LOCATION||'').includes('/painel/login/');
+          const routeHealthy=Number(e.LOGIN_HTTP)===200 && loginFormPresent && attendantContract && sameOriginContract && panelRedirect;
           fs.writeFileSync('docs/login-route-status.json',JSON.stringify({
             checkedAt:new Date().toISOString(),
-            loginPageHttp:Number(e.LOGIN_HTTP),
-            loginFormPresent:true,
-            attendantInvalidLoginHttp:Number(e.ATTENDANT_HTTP),
-            attendantInvalidLoginContract:true,
-            sameOriginInvalidLoginHttp:Number(e.SITE_HTTP),
-            sameOriginInvalidLoginContract:true,
-            unauthenticatedCrmHttp:Number(e.PANEL_HTTP),
+            loginPageHttp:Number(e.LOGIN_HTTP||0),
+            loginFormPresent,
+            attendantInvalidLoginHttp:Number(e.ATTENDANT_HTTP||0),
+            attendantInvalidLoginContract:attendantContract,
+            sameOriginInvalidLoginHttp:Number(e.SITE_HTTP||0),
+            sameOriginInvalidLoginContract:sameOriginContract,
+            unauthenticatedCrmHttp:Number(e.PANEL_HTTP||0),
             unauthenticatedCrmRedirect:e.PANEL_LOCATION||'',
-            routeHealthy:true,
+            unauthenticatedCrmRedirectContract:panelRedirect,
+            routeHealthy,
             validCredentialNotLogged:true
           },null,2)+'\n');
           NODE
@@ -78,3 +72,7 @@ jobs:
           git commit -m 'chore: record CRM login route status'
           git pull --rebase origin main
           git push origin HEAD:main
+
+      - name: Enforce login route health
+        run: |
+          node -e "const x=require('./docs/login-route-status.json'); if(x.routeHealthy!==true){console.error(x);process.exit(1)}"
