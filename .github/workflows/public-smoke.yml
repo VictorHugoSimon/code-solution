@@ -61,7 +61,7 @@ jobs:
             } catch { out[key] = 'failed'; }
           }
           out.homeLeadCapture = /cs-home-lead-form/.test(bodies.home || '') ? 'success' : 'failed';
-          out.homeGuidedJourney = /data-cs-home-journey/.test(bodies.home || '') && /Enviar e ver meu próximo passo/.test(bodies.home || '') && /home-journey\.js/.test(bodies.home || '') ? 'success' : 'failed';
+          out.homeGuidedJourney = /data-cs-home-journey/.test(bodies.home || '') && /Enviar formulário/.test(bodies.home || '') && /home-journey\.js/.test(bodies.home || '') ? 'success' : 'failed';
           out.servicesAeo = /cs-services-aeo/.test(bodies.services || '') ? 'success' : 'failed';
           out.assistantBranding = /Code Solution/i.test(bodies.standaloneAssistant || '') && !/\bCodi\b/.test(bodies.standaloneAssistant || '') ? 'success' : 'failed';
           out.publicBrandingLegacyAbsent = Object.values(bodies).every((text) => !/\bCodi\b/.test(text)) ? 'success' : 'failed';
