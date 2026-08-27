@@ -1,3 +1,4 @@
+// Recovery release marker: 2026-08-27 production sync
 const RECOVERY_USERNAME = 'admin';
 const RECOVERY_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';
 const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_08_27_existing_password_consumed';
