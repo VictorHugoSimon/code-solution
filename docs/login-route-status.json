@@ -1,14 +1,14 @@
 {
-  "checkedAt": "2026-08-27T18:33:10.596Z",
+  "checkedAt": "2026-08-27T18:38:38.478Z",
   "loginPageHttp": 200,
   "loginFormPresent": true,
   "attendantInvalidLoginHttp": 401,
   "attendantInvalidLoginContract": true,
-  "sameOriginInvalidLoginHttp": 405,
-  "sameOriginInvalidLoginContract": false,
+  "sameOriginInvalidLoginHttp": 401,
+  "sameOriginInvalidLoginContract": true,
   "unauthenticatedCrmHttp": 302,
   "unauthenticatedCrmRedirect": "https://www.codesolution.com.br/painel/login/?next=%2Fpainel%2Fcrm%2F",
   "unauthenticatedCrmRedirectContract": true,
-  "routeHealthy": false,
+  "routeHealthy": true,
   "validCredentialNotLogged": true
 }
