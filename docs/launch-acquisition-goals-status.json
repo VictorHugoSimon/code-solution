@@ -1,0 +1,114 @@
+{
+  "checkedAt": "2026-08-27T15:04:46.203Z",
+  "sourceCommit": "4d9c639b9d4f5d0856bf64181ffc4dd1f5379a40",
+  "status": "success",
+  "baseline": "30-day-organic-launch",
+  "measurementWindowDays": 7,
+  "priorityChannel": "linkedin",
+  "targets": {
+    "linkedin": [
+      50,
+      4,
+      1
+    ],
+    "prospeccao_ativa": [
+      0,
+      3,
+      0
+    ],
+    "indicacao": [
+      0,
+      2,
+      1
+    ],
+    "whatsapp": [
+      20,
+      2,
+      0
+    ],
+    "site": [
+      120,
+      3,
+      1
+    ],
+    "google": [
+      80,
+      2,
+      0
+    ],
+    "instagram": [
+      40,
+      1,
+      0
+    ],
+    "facebook": [
+      20,
+      1,
+      0
+    ],
+    "email": [
+      20,
+      1,
+      0
+    ],
+    "direto": [
+      40,
+      1,
+      0
+    ]
+  },
+  "observed": {
+    "linkedin": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "prospeccao_ativa": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "indicacao": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "whatsapp": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "site": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "google": {
+      "sessions": 2,
+      "leads": 0,
+      "wins": 0
+    },
+    "instagram": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "facebook": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "email": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    },
+    "direto": {
+      "sessions": 0,
+      "leads": 0,
+      "wins": 0
+    }
+  },
+  "generatedAt": "2026-08-27T15:04:46.102Z",
+  "note": "Operating targets for the first 30 days; these are targets, not observed performance or forecasts."
+}
