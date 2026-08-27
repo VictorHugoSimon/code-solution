@@ -1,13 +1,17 @@
 {
-  "checkedAt": "2026-08-27T17:34:38.577Z",
+  "checkedAt": "2026-08-27T18:29:51.643Z",
   "username": "admin",
   "userExists": true,
   "displayName": "Administrador Code Solution",
   "role": "admin",
   "active": true,
-  "sessionVersion": 20,
+  "sessionVersion": 21,
   "lastLoginAt": "2026-08-26T14:38:25.888Z",
-  "updatedAt": "2026-08-27T17:34:24.168Z",
+  "updatedAt": "2026-08-27T18:27:30.247Z",
+  "passwordIterations": 180000,
+  "rotatedCredentialMatches": true,
+  "credentialRotationApplied": true,
+  "credentialRotationAppliedAt": "2026-08-27T18:27:30.247Z",
   "persistentCredentialSet": true,
   "persistentCredentialSetAt": "2026-08-27T17:34:24.168Z",
   "recoveryConsumed": false,
@@ -19,6 +23,6 @@
   "loginFailureCount": 3,
   "lastLoginFailureAt": "2026-08-26T16:55:14.966Z",
   "knownCredentialReady": true,
-  "credentialState": "persistent-admin",
+  "credentialState": "rotated-admin",
   "plaintextPasswordStored": false
 }
