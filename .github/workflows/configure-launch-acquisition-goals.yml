@@ -1,0 +1,119 @@
+name: Configure launch acquisition goals
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/configure-launch-acquisition-goals.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-launch-acquisition-goals
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ATTENDANT: https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+      CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require CRM technical credential
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+
+      - name: Apply 30-day organic launch baseline
+        id: apply
+        run: |
+          set -euo pipefail
+          cat > /tmp/goals.tsv <<'EOF'
+          linkedin	50	4	1
+          prospeccao_ativa	0	3	0
+          indicacao	0	2	1
+          whatsapp	20	2	0
+          site	120	3	1
+          google	80	2	0
+          instagram	40	1	0
+          facebook	20	1	0
+          email	20	1	0
+          direto	40	1	0
+          EOF
+
+          while IFS=$'\t' read -r channel sessions leads wins; do
+            body=$(printf '{"sessionsGoal":%s,"leadsGoal":%s,"winsGoal":%s,"active":true}' "$sessions" "$leads" "$wins")
+            http=$(curl -sS --max-time 25 -o "/tmp/${channel}.json" -w '%{http_code}' \
+              -X PATCH "$ATTENDANT/crm/acquisition/goal/$channel" \
+              -H 'content-type: application/json' \
+              -H "x-crm-key: $CRM_ADMIN_KEY" \
+              --data "$body")
+            echo "$channel -> $http"
+            test "$http" = 200
+            node -e "const x=require('/tmp/${channel}.json');if(x.ok!==true)process.exit(1)"
+          done < /tmp/goals.tsv
+
+          http=$(curl -sS --max-time 25 -o /tmp/goals.json -w '%{http_code}' \
+            "$ATTENDANT/crm/acquisition/goals?days=7" \
+            -H "x-crm-key: $CRM_ADMIN_KEY")
+          test "$http" = 200
+          node - <<'NODE'
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/goals.json','utf8'));
+          if(x.ok!==true) process.exit(1);
+          const expected={
+            linkedin:[50,4,1],prospeccao_ativa:[0,3,0],indicacao:[0,2,1],whatsapp:[20,2,0],site:[120,3,1],
+            google:[80,2,0],instagram:[40,1,0],facebook:[20,1,0],email:[20,1,0],direto:[40,1,0]
+          };
+          const by=Object.fromEntries((x.goals||[]).map(g=>[g.channel,g]));
+          for(const [channel,[sessions,leads,wins]] of Object.entries(expected)){
+            const g=by[channel];
+            if(!g||g.goals.sessions!==sessions||g.goals.leads!==leads||g.goals.wins!==wins) throw new Error(`goal mismatch: ${channel}`);
+          }
+          fs.writeFileSync('/tmp/verified-goals.json',JSON.stringify({
+            status:'success',
+            baseline:'30-day-organic-launch',
+            measurementWindowDays:7,
+            priorityChannel:'linkedin',
+            targets:expected,
+            observed:Object.fromEntries(Object.keys(expected).map(k=>[k,by[k]?.actual||{sessions:0,leads:0,wins:0}])),
+            generatedAt:x.generatedAt||new Date().toISOString()
+          },null,2)+'\n');
+          NODE
+
+      - name: Persist launch goal status
+        if: always()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          APPLY_OUTCOME: ${{ steps.apply.outcome }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          let verified={};
+          try{verified=JSON.parse(fs.readFileSync('/tmp/verified-goals.json','utf8'))}catch{}
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            status:e.APPLY_OUTCOME==='success'?'success':'failure',
+            ...verified,
+            note:'Operating targets for the first 30 days; these are targets, not observed performance or forecasts.'
+          };
+          fs.writeFileSync('docs/launch-acquisition-goals-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Growth Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/launch-acquisition-goals-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record launch acquisition goals'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce baseline configuration
+        if: always()
+        run: test '${{ steps.apply.outcome }}' = success
