@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-27T17:00:21.318Z",
+  "checkedAt": "2026-08-27T17:31:31.135Z",
   "username": "admin",
   "userExists": true,
   "displayName": "Administrador Code Solution",
@@ -10,10 +10,13 @@
   "updatedAt": "2026-08-26T14:38:25.888Z",
   "recoveryConsumed": false,
   "recoveryLastAt": null,
+  "bootstrapConsumed": false,
+  "bootstrapLastAt": null,
   "loginSuccessCount": 4,
   "lastLoginSuccessAt": "2026-08-26T14:38:26.206Z",
   "loginFailureCount": 3,
   "lastLoginFailureAt": "2026-08-26T16:55:14.966Z",
+  "knownRecoveryCredentialAvailable": true,
   "credentialState": "recovery-ready",
   "plaintextPasswordStored": false
 }
