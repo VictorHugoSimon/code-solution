@@ -1,3 +1,4 @@
+# Production release marker: 2026-08-27 admin access recovery
 name: Release CRM login to production
 
 on:
