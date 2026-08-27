@@ -60,12 +60,31 @@ for (const needle of [
 }
 if (/data-wa-link/i.test(journeyRuntime)) failures.push('deploy/home-journey.js: runtime still depends on WhatsApp CTA');
 
+const governance = await fs.readFile('deploy/painel/crm/governanca/index.html', 'utf8').catch(() => '');
+for (const needle of [
+  'Governança dos agentes autônomos',
+  '/api/crm/autonomy',
+  '/resilience',
+  '/governance/global',
+  '/dlq?limit=100',
+  'Executar manutenção',
+  'Acionar kill switch',
+  'fail closed',
+]) {
+  if (!governance.includes(needle)) failures.push(`deploy/painel/crm/governanca/index.html: missing ${needle}`);
+}
+
+const autonomyPanel = await fs.readFile('deploy/painel/crm/autonomia/index.html', 'utf8').catch(() => '');
+if (!autonomyPanel.includes('/painel/crm/governanca/')) failures.push('deploy/painel/crm/autonomia/index.html: Governance navigation missing');
+if (autonomyPanel.includes('Planejado · Onda 4')) failures.push('deploy/painel/crm/autonomia/index.html: Delivery Agent still marked planned');
+if (autonomyPanel.includes('Próxima onda · Onda 5')) failures.push('deploy/painel/crm/autonomia/index.html: Executive Agent still marked next wave');
+
 if (failures.length) {
   console.error('Bundled surface validation failed:');
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Bundled surfaces OK: premium Home refinement v3, form-first conversion, CRM capture, AEO and analytics runtime verified.');
+console.log('Bundled surfaces OK: premium Home, CRM capture, AEO, analytics and autonomous governance panel verified.');
 
 function readTemplate(html, file) {
   const match = html.match(/<script type="__bundler\/template">([\s\S]*?)<\/script>/);
