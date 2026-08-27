@@ -17,6 +17,7 @@ assert not (required_lead_cols - lead_cols), f'missing leads columns: {sorted(re
 required_tables = {
     'leads','lead_events','crm_tasks','crm_alerts','crm_owners','crm_automation_runs',
     'lead_acquisition_links','acquisition_events','panel_users','panel_sessions','panel_audit_log',
+    'prospecting_daily_activity',
     'autonomy_goals','autonomy_runs','autonomy_tasks','autonomy_decisions','autonomy_approvals',
     'crm_proposals','crm_proposal_events','autonomy_agent_controls','delivery_handoffs','executive_briefs',
     'autonomy_task_retries','autonomy_dead_letters','autonomy_agent_daily_usage','autonomy_policy_versions'
@@ -28,6 +29,12 @@ user_cols = {row[1] for row in conn.execute('PRAGMA table_info(panel_users)')}
 assert {'id','username','display_name','role','password_hash','password_salt','password_iterations','active','session_version','last_login_at'} <= user_cols
 session_cols = {row[1] for row in conn.execute('PRAGMA table_info(panel_sessions)')}
 assert {'token_hash','user_id','session_version','expires_at','revoked_at'} <= session_cols
+
+prospecting_cols = {row[1] for row in conn.execute('PRAGMA table_info(prospecting_daily_activity)')}
+assert {
+    'activity_date','owner','channel','connections','interactions','first_messages','followups',
+    'content_posts','qualified_replies','meetings_booked','notes','created_at','updated_at'
+} <= prospecting_cols
 
 autonomy_task_cols = {row[1] for row in conn.execute('PRAGMA table_info(autonomy_tasks)')}
 assert {'unique_key','agent','action_type','risk_level','approval_required','status','priority','payload_json'} <= autonomy_task_cols
@@ -60,6 +67,9 @@ assert conn.execute("SELECT enabled FROM autonomy_agent_controls WHERE agent_id=
 assert conn.execute("SELECT count(*) FROM autonomy_agent_controls WHERE agent_id IN ('delivery','executive','governance')").fetchone()[0] == 3
 assert conn.execute("SELECT policy_version FROM autonomy_policy_versions WHERE active=1 ORDER BY created_at DESC LIMIT 1").fetchone()[0] == 'autonomy-policy-2026-08-27.1'
 
+conn.execute("INSERT INTO prospecting_daily_activity (id,activity_date,owner,channel,connections,interactions,first_messages,followups,content_posts,qualified_replies,meetings_booked,created_at,updated_at) VALUES ('prospecting-test','2026-08-27','admin','linkedin',15,10,5,5,1,2,1,datetime('now'),datetime('now'))")
+assert conn.execute("SELECT meetings_booked FROM prospecting_daily_activity WHERE id='prospecting-test'").fetchone()[0] == 1
+
 conn.execute("INSERT INTO leads (id,name,whatsapp,need,status,created_at,updated_at) VALUES ('proposal-lead','Teste','5518999999999','Automatizar processo comercial','proposta',datetime('now'),datetime('now'))")
 conn.execute("INSERT INTO crm_proposals (id,lead_id,version,status,approval_status,title,created_at,updated_at) VALUES ('proposal-test','proposal-lead',1,'pending_approval','pending','Proposta teste',datetime('now'),datetime('now'))")
 assert conn.execute("SELECT count(*) FROM crm_proposals WHERE lead_id='proposal-lead' AND status='pending_approval'").fetchone()[0] == 1
@@ -69,4 +79,4 @@ conn.execute("INSERT INTO autonomy_task_retries (task_id,attempts,max_attempts,s
 assert conn.execute("SELECT attempts FROM autonomy_task_retries WHERE task_id='retry-task'").fetchone()[0] == 1
 
 conn.close()
-print('CRM + identity + Autonomous OS + Proposal + Operational Agents + Governance resilience schema contract: OK')
+print('CRM + identity + Prospecting + Autonomous OS + Proposal + Operational Agents + Governance resilience schema contract: OK')
