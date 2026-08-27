@@ -1,10 +1,15 @@
 {
-  "checkedAt": "2026-08-25T13:33:07.267Z",
-  "sourceCommit": "bc54282aa11f2364ad5afae0ccf557eccc95260c",
-  "validate": "success",
-  "crmAdminSecretSync": "success",
-  "pagesDeploy": "success",
-  "publicLoginSmoke": "success",
+  "checkedAt": "2026-08-27T17:30:38.421Z",
+  "sourceCommit": "d2d983c29bddf86711a5543b6715a13a15cd1a37",
+  "cloudflareAccount": "cad25fe6c91871bbafb58236cf9b9b81",
+  "project": "codesolution-site",
   "loginUrl": "https://www.codesolution.com.br/painel/login/",
-  "crmUrl": "https://www.codesolution.com.br/painel/crm/"
+  "crmUrl": "https://www.codesolution.com.br/painel/crm/",
+  "username": "admin",
+  "credentials": "success",
+  "build": "success",
+  "pagesSecretSync": "success",
+  "pagesDeploy": "success",
+  "liveLoginSmoke": "success",
+  "plaintextPasswordStoredInRepository": false
 }
