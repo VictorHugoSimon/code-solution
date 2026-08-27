@@ -130,6 +130,7 @@ jobs:
           git add docs/crm-login-release-status.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore: record CRM login production release"
+          git reset --hard HEAD
           git pull --rebase origin main
           git push origin HEAD:main
 
