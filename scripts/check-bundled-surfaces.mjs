@@ -11,7 +11,7 @@ const checks = [
       'id="cs-home-lead"',
       'id="cs-home-lead-form"',
       'data-cs-home-journey',
-      'data-cs-home-layout-refinement="2"',
+      'data-cs-home-layout-refinement="3"',
       'Enviar formulário',
       'data-cs-success',
       'name="consent"',
@@ -65,7 +65,7 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Bundled surfaces OK: premium Home refinement, form-first conversion, CRM capture, AEO and analytics runtime verified.');
+console.log('Bundled surfaces OK: premium Home refinement v3, form-first conversion, CRM capture, AEO and analytics runtime verified.');
 
 function readTemplate(html, file) {
   const match = html.match(/<script type="__bundler\/template">([\s\S]*?)<\/script>/);
