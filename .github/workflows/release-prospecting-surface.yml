@@ -1,0 +1,120 @@
+name: Release prospecting surface
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-prospecting-surface.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: code-solution-prospecting-pages-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and validate prospecting surface
+        id: build
+        run: |
+          set -euo pipefail
+          npm run blog:index
+          npm run blog:static
+          npm run pages:prepare
+          node --check deploy/painel/prospeccao/operations.js
+          grep -q 'data-cs-prospecting-operations="1"' deploy/painel/prospeccao/index.html
+          grep -q '/painel/prospeccao/operations.js' deploy/painel/prospeccao/index.html
+          grep -q '/api/crm/prospecting/activity' deploy/painel/prospeccao/operations.js
+          cat > deploy/prospecting-operations-release.json <<'EOF'
+          {"version":"prospecting-ops-2026-08-27.1","status":"published","panel":"/painel/prospeccao/","api":"/api/crm/prospecting/activity","branding":"Code Solution"}
+          EOF
+
+      - name: Deploy Pages production
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --commit-hash="$GITHUB_SHA" --commit-message="Prospecting operations release $GITHUB_SHA"
+
+      - name: Verify live production surface
+        id: live
+        run: |
+          set -euo pipefail
+          ok=false
+          marker_http=0
+          login_http=0
+          panel_http=0
+          for attempt in $(seq 1 30); do
+            marker_http=$(curl -sS --max-time 25 -o /tmp/marker.json -w '%{http_code}' https://www.codesolution.com.br/prospecting-operations-release.json || true)
+            if [ "$marker_http" = 200 ] && node -e "const x=require('/tmp/marker.json');process.exit(x.version==='prospecting-ops-2026-08-27.1'&&x.status==='published'?0:1)"; then
+              ok=true
+              break
+            fi
+            sleep 4
+          done
+          login_http=$(curl -sS --max-time 20 -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          headers=$(mktemp)
+          curl -sS --max-time 20 -D "$headers" -o /dev/null https://www.codesolution.com.br/painel/prospeccao/
+          panel_http=$(head -n1 "$headers" | awk '{print $2}')
+          panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$ok" = true
+          test "$login_http" = 200
+          test "$panel_http" = 302
+          echo "$panel_location" | grep -q '/painel/login/'
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "marker_http=$marker_http" >> "$GITHUB_OUTPUT"
+          echo "login_http=$login_http" >> "$GITHUB_OUTPUT"
+          echo "panel_http=$panel_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist Pages prospecting release status
+        if: always()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          BUILD: ${{ steps.build.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          LIVE: ${{ steps.live.outputs.ok }}
+          MARKER_HTTP: ${{ steps.live.outputs.marker_http }}
+          LOGIN_HTTP: ${{ steps.live.outputs.login_http }}
+          PANEL_HTTP: ${{ steps.live.outputs.panel_http }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          const out={
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            status:e.BUILD==='success'&&e.DEPLOY==='success'&&e.LIVE==='true'?'success':'failure',
+            build:e.BUILD||'failure',pagesDeploy:e.DEPLOY||'failure',liveMarker:e.LIVE==='true',
+            markerHttp:Number(e.MARKER_HTTP||0),loginHttp:Number(e.LOGIN_HTTP||0),unauthenticatedPanelHttp:Number(e.PANEL_HTTP||0),
+            version:'prospecting-ops-2026-08-27.1',panelUrl:'https://www.codesolution.com.br/painel/prospeccao/',
+            api:'/api/crm/prospecting/activity',widget:'daily-execution-and-ICP-playbooks'
+          };
+          fs.writeFileSync('docs/prospecting-pages-release-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Prospecting Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/prospecting-pages-release-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record prospecting Pages release status'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce Pages prospecting release
+        if: always()
+        run: |
+          test '${{ steps.build.outcome }}' = success
+          test '${{ steps.deploy.outcome }}' = success
+          test '${{ steps.live.outputs.ok }}' = true
