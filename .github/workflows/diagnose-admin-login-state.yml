@@ -1,4 +1,4 @@
-# Admin access diagnostic marker: 2026-08-28 final credential validation
+# Admin access diagnostic marker: 2026-08-28 owner chat final credential v2
 name: Diagnose admin login state
 
 on:
@@ -37,8 +37,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,last_login_at,updated_at,password_iterations,CASE WHEN password_hash='e817524747ef2caa789b7eb0faeff1b4597301b4bd82e6810631d6ec61bb9624' AND password_salt='61e351df07768c9ac3ac1d110548116fd7f77ac22f878783' THEN 1 ELSE 0 END AS credential_hash_matches FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/admin-user.json
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) AS total,MAX(created_at) AS last_at FROM panel_audit_log WHERE username='admin' OR action IN ('admin_password_reset_2026_08_28_final_chat_approved','login_success','login_failure') GROUP BY action ORDER BY action;" --json > /tmp/admin-audit.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,last_login_at,updated_at,password_iterations,CASE WHEN password_hash='323e04d6cd5108d8d8ca31fcc2ae4ba235c4be493a88658a96a63cecfba2b4cd' AND password_salt='9d88c6c71b984a81a3a4f054606f206a4d691ca6e95af5f3' THEN 1 ELSE 0 END AS credential_hash_matches FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/admin-user.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) AS total,MAX(created_at) AS last_at FROM panel_audit_log WHERE username='admin' OR action IN ('admin_password_reset_2026_08_28_owner_chat_final_v2','login_success','login_failure') GROUP BY action ORDER BY action;" --json > /tmp/admin-audit.json
 
           node - <<'NODE'
           const fs=require('fs');
@@ -52,7 +52,7 @@ jobs:
           const users=rows('/tmp/admin-user.json');
           const audits=rows('/tmp/admin-audit.json');
           const u=users[0]||null;
-          const reset=audits.find(x=>x.action==='admin_password_reset_2026_08_28_final_chat_approved');
+          const reset=audits.find(x=>x.action==='admin_password_reset_2026_08_28_owner_chat_final_v2');
           const loginSuccess=audits.find(x=>x.action==='login_success');
           const loginFailure=audits.find(x=>x.action==='login_failure');
           const credentialResetApplied=Number(reset?.total||0)>0;
@@ -75,7 +75,7 @@ jobs:
             loginFailureCount:Number(loginFailure?.total||0),
             lastLoginFailureAt:loginFailure?.last_at||null,
             knownCredentialReady:credentialResetApplied && Boolean(Number(u?.credential_hash_matches||0)),
-            credentialState:credentialResetApplied?'final-admin':'pending-final-admin',
+            credentialState:credentialResetApplied?'final-admin-v2':'pending-final-admin-v2',
             plaintextPasswordStored:false
           };
           fs.mkdirSync('docs',{recursive:true});
