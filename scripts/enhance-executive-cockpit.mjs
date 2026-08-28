@@ -6,7 +6,7 @@ const page = path.join(root, 'executivo', 'index.html');
 const link = '<a class="cs-side-link" href="/painel/executivo/" data-cs-section="executivo" data-cs-permission="crm_read"><span class="cs-side-icon">◈</span><span>Executivo</span><span class="cs-action-badge" data-cs-action="executivo"></span></a>';
 
 const source = await fs.readFile(page, 'utf8');
-for (const needle of ['Cockpit Executivo','/api/crm/leads?limit=500','/api/crm/autonomy','/api/crm/autonomy/artifacts','Próximas melhores ações','SLA de primeiro contato']) {
+for (const needle of ['Cockpit Executivo',"API+'/leads?limit=500'", "API+'/autonomy'", "API+'/autonomy/artifacts'",'Próximas melhores ações','SLA de primeiro contato']) {
   if (!source.includes(needle)) throw new Error('Executive cockpit missing: ' + needle);
 }
 
