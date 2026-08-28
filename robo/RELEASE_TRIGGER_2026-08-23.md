@@ -11,3 +11,7 @@ Novo disparo solicitado após confirmação de que o repository secret `CRM_ADMI
 ## 2026-08-25 — fechamento final de produção
 
 Disparo único para encerrar a validação de lançamento: reprovisionar/verificar D1, publicar os dois Workers na conta Cloudflare pessoal, sincronizar secrets disponíveis e executar o smoke real de health, chat, contrato de lead e proteção do CRM. Este registro não contém credenciais nem altera dados de clientes.
+
+## 2026-08-28 — rerun após ajuste do limite de Cron Triggers
+
+Disparo operacional após consolidar os dois horários de publicação social em uma única expressão cron (`30 13,17 * * 1-5`), mantendo os mesmos horários funcionais e reduzindo a configuração de seis para cinco triggers, dentro do limite do plano Cloudflare Free. Também revalida a credencial administrativa final persistida no D1.
