@@ -36,8 +36,8 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('panel_users','panel_sessions','panel_audit_log','leads') ORDER BY name;" --json > /tmp/tables.json
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,password_iterations,CASE WHEN password_hash='d4fd6c1576c0b6bf868589b475c8409a15560d1f277b8d73282857e6e5140b82' AND password_salt='e3e89491fc5b66a11325c4aef6d81eedd84387ea1ca2250c' THEN 1 ELSE 0 END AS credential_hash_matches,updated_at FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/user.json
-          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) total,MAX(created_at) last_at FROM panel_audit_log WHERE action IN ('admin_canonical_access_2026_08_28_v4','admin_recovery_2026_08_27_existing_password_consumed','bootstrap_known_password_consumed') GROUP BY action ORDER BY action;" --json > /tmp/audit.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,password_iterations,CASE WHEN password_hash='ccc9c7dedecefee78730672a6e38348e003f8f4abfb03f83a2e224c7f0eb37ef' AND password_salt='e3e89491fc5b66a11325c4aef6d81eedd84387ea1ca2250c' THEN 1 ELSE 0 END AS credential_hash_matches,updated_at FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/user.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) total,MAX(created_at) last_at FROM panel_audit_log WHERE action IN ('admin_canonical_access_2026_08_28_v4','admin_cloudflare_pbkdf2_100k_2026_08_28','admin_recovery_2026_08_27_existing_password_consumed','bootstrap_known_password_consumed') GROUP BY action ORDER BY action;" --json > /tmp/audit.json
           npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT COUNT(*) AS active_sessions FROM panel_sessions s JOIN panel_users u ON u.id=s.user_id WHERE u.username='admin' COLLATE NOCASE AND s.revoked_at IS NULL AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now');" --json > /tmp/sessions.json
 
       - name: Probe live authentication surfaces
@@ -54,7 +54,6 @@ jobs:
           echo "health_http=$health_http auth_http=$auth_http page_http=$page_http marker_exit=$marker"
           echo 'health body:'; cat /tmp/health.json 2>/dev/null || true
           echo; echo 'auth body:'; cat /tmp/auth.json 2>/dev/null || true
-          echo; echo 'login title/markers:'; grep -Eoi '<title>[^<]*|Acesso ao CRM|Entrar|Code Solution' /tmp/login.html 2>/dev/null | head -20 || true
           exit 0
 
       - name: Persist exact access evidence
@@ -65,8 +64,8 @@ jobs:
           const read=p=>{try{return fs.readFileSync(p,'utf8').trim()}catch{return ''}};
           const tables=rows('/tmp/tables.json').map(x=>x.name),u=rows('/tmp/user.json')[0]||{},audit=rows('/tmp/audit.json'),s=rows('/tmp/sessions.json')[0]||{};
           const has=a=>audit.some(x=>x.action===a&&Number(x.total||0)>0);
-          const out={checkedAt:new Date().toISOString(),database:'code-solution-crm',databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',requiredTables:tables,admin:{username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Boolean(Number(u.active||0)),sessionVersion:Number(u.session_version||0),passwordIterations:Number(u.password_iterations||0),credentialHashMatches:Boolean(Number(u.credential_hash_matches||0)),updatedAt:u.updated_at||null},legacyRecoveryDisabled:has('admin_recovery_2026_08_27_existing_password_consumed'),bootstrapCredentialDisabled:has('bootstrap_known_password_consumed'),canonicalCredentialApplied:has('admin_canonical_access_2026_08_28_v4'),activeAdminSessions:Number(s.active_sessions||0),live:{attendantHealthHttp:Number(read('/tmp/health-http.txt')||0),invalidLoginHttp:Number(read('/tmp/auth-http.txt')||0),loginPageHttp:Number(read('/tmp/page-http.txt')||0),loginPageContainsExpectedMarker:read('/tmp/page-marker.txt')==='0'},loginUrl:'https://www.codesolution.com.br/painel/login/',credentialState:'canonical-owner-v4',plaintextPasswordStored:false};
-          out.databaseOk=['leads','panel_audit_log','panel_sessions','panel_users'].every(x=>tables.includes(x))&&out.admin.username==='admin'&&out.admin.role==='admin'&&out.admin.active&&out.admin.passwordIterations===180000&&out.admin.credentialHashMatches&&out.legacyRecoveryDisabled&&out.bootstrapCredentialDisabled&&out.canonicalCredentialApplied;
+          const out={checkedAt:new Date().toISOString(),database:'code-solution-crm',databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',requiredTables:tables,admin:{username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Boolean(Number(u.active||0)),sessionVersion:Number(u.session_version||0),passwordIterations:Number(u.password_iterations||0),credentialHashMatches:Boolean(Number(u.credential_hash_matches||0)),updatedAt:u.updated_at||null},legacyRecoveryDisabled:has('admin_recovery_2026_08_27_existing_password_consumed'),bootstrapCredentialDisabled:has('bootstrap_known_password_consumed'),canonicalCredentialApplied:has('admin_canonical_access_2026_08_28_v4'),cloudflarePbkdf2FixApplied:has('admin_cloudflare_pbkdf2_100k_2026_08_28'),activeAdminSessions:Number(s.active_sessions||0),live:{attendantHealthHttp:Number(read('/tmp/health-http.txt')||0),invalidLoginHttp:Number(read('/tmp/auth-http.txt')||0),loginPageHttp:Number(read('/tmp/page-http.txt')||0),loginPageContainsExpectedMarker:read('/tmp/page-marker.txt')==='0'},loginUrl:'https://www.codesolution.com.br/painel/login/',credentialState:'canonical-owner-cloudflare-100k',plaintextPasswordStored:false};
+          out.databaseOk=['leads','panel_audit_log','panel_sessions','panel_users'].every(x=>tables.includes(x))&&out.admin.username==='admin'&&out.admin.role==='admin'&&out.admin.active&&out.admin.passwordIterations===100000&&out.admin.credentialHashMatches&&out.legacyRecoveryDisabled&&out.bootstrapCredentialDisabled&&out.canonicalCredentialApplied&&out.cloudflarePbkdf2FixApplied;
           out.liveOk=out.live.attendantHealthHttp===200&&out.live.invalidLoginHttp===401&&out.live.loginPageHttp===200&&out.live.loginPageContainsExpectedMarker;
           out.ok=out.databaseOk&&out.liveOk;
           fs.mkdirSync('docs',{recursive:true});fs.writeFileSync('docs/admin-access-validation.json',JSON.stringify(out,null,2)+'\n');
@@ -78,7 +77,7 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add docs/admin-access-validation.json
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'chore: record exact CRM access validation'
+          git commit -m 'chore: record Cloudflare-compatible CRM access validation'
           git pull --rebase origin main
           git push origin HEAD:main
 
