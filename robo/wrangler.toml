@@ -7,8 +7,7 @@ crons = [
   "0 11 * * 1-5",
   "0 12 * * 2,5",
   "0 13 * * 1",
-  "30 13 * * 1-5",
-  "30 17 * * 1-5",
+  "30 13,17 * * 1-5",
   "0 20 * * 5"
 ]
 
@@ -31,4 +30,4 @@ LINKEDIN_VERSION = "202608"
 # Meta/Facebook: META_PAGE_ACCESS_TOKEN + META_PAGE_ID + META_GRAPH_VERSION
 # Instagram: META_IG_USER_ID + INSTAGRAM_MEDIA_URL (public JPEG) in addition to Meta vars.
 
-# release-trigger: autonomous-social-acquisition-2026-08-28-v1
+# release-trigger: autonomous-social-acquisition-2026-08-28-v2-free-cron-limit

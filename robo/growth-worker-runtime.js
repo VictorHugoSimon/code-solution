@@ -11,10 +11,9 @@ import { getSocialPublisherStatus, runSocialPublisher } from './social-publisher
 const DAILY_CRON = '0 11 * * 1-5';
 const BLOG_CRON = '0 12 * * 2,5';
 const PLAN_CRON = '0 13 * * 1';
-const PUBLISH_MORNING_CRON = '30 13 * * 1-5';
-const PUBLISH_AFTERNOON_CRON = '30 17 * * 1-5';
+const PUBLISH_CRON = '30 13,17 * * 1-5';
 const METRICS_CRON = '0 20 * * 5';
-const BUILD = 'growth-orchestrator-2026-08-28.1';
+const BUILD = 'growth-orchestrator-2026-08-28.2';
 const PANEL_ORIGIN = 'https://www.codesolution.com.br';
 
 export default {
@@ -43,8 +42,7 @@ export default {
             daily: DAILY_CRON,
             blog: BLOG_CRON,
             weeklyPlan: PLAN_CRON,
-            publishMorning: PUBLISH_MORNING_CRON,
-            publishAfternoon: PUBLISH_AFTERNOON_CRON,
+            publisher: PUBLISH_CRON,
             metrics: METRICS_CRON,
           },
         });
@@ -90,7 +88,7 @@ export default {
       ctx.waitUntil(runWeeklyPlanAgent(env, { trigger: 'cron' }).catch(logError('weekly plan')));
       return;
     }
-    if (cron === PUBLISH_MORNING_CRON || cron === PUBLISH_AFTERNOON_CRON) {
+    if (cron === PUBLISH_CRON) {
       ctx.waitUntil(runSocialPublisher(env, { trigger: 'cron' }).catch(logError('social publisher')));
       return;
     }
