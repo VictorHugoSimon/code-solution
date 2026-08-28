@@ -6,7 +6,7 @@ const page = path.join(root, 'delivery', 'index.html');
 const link = '<a class="cs-side-link" href="/painel/delivery/" data-cs-section="delivery" data-cs-permission="crm_read"><span class="cs-side-icon">▦</span><span>Delivery</span><span class="cs-action-badge" data-cs-action="delivery"></span></a>';
 
 const source = await fs.readFile(page, 'utf8');
-for (const needle of ['Central de Delivery','/api/crm/autonomy/artifacts','Handoffs em rascunho','Checklist de kickoff','Delivery Agent']) {
+for (const needle of ['Central de Delivery',"API+'/autonomy/artifacts'",'Handoffs em rascunho','Checklist de kickoff','Delivery Agent']) {
   if (!source.includes(needle)) throw new Error('Delivery center missing: ' + needle);
 }
 
