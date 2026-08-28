@@ -1,0 +1,111 @@
+name: Apply canonical CRM admin access
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crm/migrations/0019_admin_canonical_access_20260828.sql'
+      - '.github/workflows/apply-admin-canonical-access.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require personal Cloudflare account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+
+      - name: Apply canonical admin migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --file=crm/migrations/0019_admin_canonical_access_20260828.sql --yes
+
+      - name: Validate D1 schema and canonical admin state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('panel_users','panel_sessions','panel_audit_log','leads') ORDER BY name;" --json > /tmp/tables.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,password_iterations,CASE WHEN password_hash='d4fd6c1576c0b6bf868589b475c8409a15560d1f277b8d73282857e6e5140b82' AND password_salt='e3e89491fc5b66a11325c4aef6d81eedd84387ea1ca2250c' THEN 1 ELSE 0 END AS credential_hash_matches,updated_at FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/user.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT action,COUNT(*) total,MAX(created_at) last_at FROM panel_audit_log WHERE action IN ('admin_canonical_access_2026_08_28_v4','admin_recovery_2026_08_27_existing_password_consumed','bootstrap_known_password_consumed') GROUP BY action ORDER BY action;" --json > /tmp/audit.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT COUNT(*) AS active_sessions FROM panel_sessions s JOIN panel_users u ON u.id=s.user_id WHERE u.username='admin' COLLATE NOCASE AND s.revoked_at IS NULL AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now');" --json > /tmp/sessions.json
+
+      - name: Validate live authentication surfaces
+        id: live
+        run: |
+          set -euo pipefail
+          health_http=$(curl -sS -o /tmp/health.json -w '%{http_code}' https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health)
+          login_route_http=$(curl -sS -o /tmp/login-route.json -w '%{http_code}' -X POST https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/login -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"username":"admin","password":"__definitely_invalid__"}')
+          page_http=$(curl -sS -o /tmp/login-page.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          echo "health_http=$health_http" >> "$GITHUB_OUTPUT"
+          echo "login_route_http=$login_route_http" >> "$GITHUB_OUTPUT"
+          echo "page_http=$page_http" >> "$GITHUB_OUTPUT"
+          test "$health_http" = 200
+          test "$login_route_http" = 401
+          test "$page_http" = 200
+          grep -qi 'Acesso ao CRM' /tmp/login-page.html
+
+      - name: Persist validation evidence
+        env:
+          HEALTH_HTTP: ${{ steps.live.outputs.health_http }}
+          LOGIN_ROUTE_HTTP: ${{ steps.live.outputs.login_route_http }}
+          PAGE_HTTP: ${{ steps.live.outputs.page_http }}
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          function rows(path){const x=JSON.parse(fs.readFileSync(path,'utf8'));const a=Array.isArray(x)?x:(x.result||[]);return Array.isArray(a[0]?.results)?a[0].results:(Array.isArray(a?.results)?a.results:[])}
+          const tables=rows('/tmp/tables.json').map(x=>x.name);
+          const user=rows('/tmp/user.json')[0]||{};
+          const audit=rows('/tmp/audit.json');
+          const sessions=rows('/tmp/sessions.json')[0]||{};
+          const has=a=>audit.some(x=>x.action===a && Number(x.total||0)>0);
+          const out={
+            checkedAt:new Date().toISOString(),
+            database:'code-solution-crm',
+            databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',
+            requiredTables:tables,
+            admin:{username:user.username||'',displayName:user.display_name||'',role:user.role||'',active:Boolean(Number(user.active||0)),sessionVersion:Number(user.session_version||0),passwordIterations:Number(user.password_iterations||0),credentialHashMatches:Boolean(Number(user.credential_hash_matches||0)),updatedAt:user.updated_at||null},
+            legacyRecoveryDisabled:has('admin_recovery_2026_08_27_existing_password_consumed'),
+            bootstrapCredentialDisabled:has('bootstrap_known_password_consumed'),
+            canonicalCredentialApplied:has('admin_canonical_access_2026_08_28_v4'),
+            activeAdminSessions:Number(sessions.active_sessions||0),
+            live:{attendantHealthHttp:Number(process.env.HEALTH_HTTP||0),invalidLoginHttp:Number(process.env.LOGIN_ROUTE_HTTP||0),loginPageHttp:Number(process.env.PAGE_HTTP||0)},
+            loginUrl:'https://www.codesolution.com.br/painel/login/',
+            credentialState:'canonical-owner-v4',
+            plaintextPasswordStored:false
+          };
+          const ok=['leads','panel_audit_log','panel_sessions','panel_users'].every(x=>tables.includes(x)) && out.admin.username==='admin' && out.admin.role==='admin' && out.admin.active && out.admin.passwordIterations===180000 && out.admin.credentialHashMatches && out.legacyRecoveryDisabled && out.bootstrapCredentialDisabled && out.canonicalCredentialApplied && out.live.attendantHealthHttp===200 && out.live.invalidLoginHttp===401 && out.live.loginPageHttp===200;
+          out.ok=ok;
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/admin-access-validation.json',JSON.stringify(out,null,2)+'\n');
+          if(!ok) process.exit(2);
+          NODE
+
+      - name: Commit evidence
+        run: |
+          git config user.name 'Code Solution Access Validation Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/admin-access-validation.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record canonical CRM access validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
