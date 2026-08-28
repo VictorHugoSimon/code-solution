@@ -17,11 +17,13 @@ await patchHtml('deploy/painel/crm/autonomia/index.html', `
 <style id="cs-panel-visual-fix-autonomia">
 /* ${MARKER} */
 html,body{max-width:100%;overflow-x:hidden}
-.agent{color:#f3f6fb!important}
-.agent h3,.agent-work b{color:#f3f6fb!important}
-.agent .muted,.agent-work .muted{color:#aeb9c9!important}
-.agent-foot{color:#9fb0c5!important}
-.agent .pill{color:#d5deea!important}
+body.cs-panel-premium .agent,body:has(.cs-sidebar) .agent{color:#f3f6fb!important}
+body.cs-panel-premium .agent h3,body:has(.cs-sidebar) .agent h3,
+body.cs-panel-premium .agent-work b,body:has(.cs-sidebar) .agent-work b{color:#f3f6fb!important}
+body.cs-panel-premium .agent .muted,body:has(.cs-sidebar) .agent .muted,
+body.cs-panel-premium .agent-work .muted,body:has(.cs-sidebar) .agent-work .muted{color:#aeb9c9!important}
+body.cs-panel-premium .agent-foot,body:has(.cs-sidebar) .agent-foot{color:#9fb0c5!important}
+body.cs-panel-premium .agent .pill,body:has(.cs-sidebar) .agent .pill{color:#d5deea!important;background:#171d2b!important;border-color:rgba(255,255,255,.09)!important}
 @media(max-width:720px){.layout,.hero,.stats{padding-left:12px!important;padding-right:12px!important}.agent-head{align-items:flex-start}.agent-head h3{min-width:0;overflow-wrap:anywhere}}
 </style>`);
 
