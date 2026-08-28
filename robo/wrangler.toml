@@ -7,6 +7,8 @@ crons = [
   "0 11 * * 1-5",
   "0 12 * * 2,5",
   "0 13 * * 1",
+  "30 13 * * 1-5",
+  "30 17 * * 1-5",
   "0 20 * * 5"
 ]
 
@@ -21,5 +23,12 @@ binding = "AI"
 [vars]
 AI_MODEL = "llama-3.1-8b-instant"
 WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
+SOCIAL_AUTO_PUBLISH = "true"
+LINKEDIN_VERSION = "202608"
 
-# release-trigger: panel-sidebar-content-health-2026-08-26-v3
+# Social provider secrets/IDs are intentionally not versioned here.
+# LinkedIn: LINKEDIN_ACCESS_TOKEN + LINKEDIN_ORGANIZATION_URN
+# Meta/Facebook: META_PAGE_ACCESS_TOKEN + META_PAGE_ID + META_GRAPH_VERSION
+# Instagram: META_IG_USER_ID + INSTAGRAM_MEDIA_URL (public JPEG) in addition to Meta vars.
+
+# release-trigger: autonomous-social-acquisition-2026-08-28-v1
