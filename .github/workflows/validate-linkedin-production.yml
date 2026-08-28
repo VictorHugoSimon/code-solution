@@ -1,0 +1,92 @@
+name: Validate LinkedIn prospecting production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-linkedin-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate LinkedIn backend and panel route
+        id: check
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          mkdir -p /tmp/linkedin-prod
+          worker='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+
+          summary_http=$(curl -sS --retry 4 --retry-delay 3 -o /tmp/linkedin-prod/summary.json -w '%{http_code}' \
+            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
+            "${worker}/crm/prospecting/linkedin/summary?owner=ercilaine")
+          test "$summary_http" = 200
+          node -e "const x=require('/tmp/linkedin-prod/summary.json'); if(x.ok!==true||x.owner!=='ercilaine') process.exit(1)"
+
+          prospects_http=$(curl -sS --retry 4 --retry-delay 3 -o /tmp/linkedin-prod/prospects.json -w '%{http_code}' \
+            -H "x-crm-key: ${CRM_ADMIN_KEY}" \
+            "${worker}/crm/prospecting/linkedin/prospects?owner=ercilaine&limit=5")
+          test "$prospects_http" = 200
+          node -e "const x=require('/tmp/linkedin-prod/prospects.json'); if(x.ok!==true||!Array.isArray(x.prospects)) process.exit(1)"
+
+          headers=$(mktemp)
+          curl -sS -D "$headers" -o /dev/null 'https://www.codesolution.com.br/painel/prospeccao/linkedin/'
+          panel_http=$(head -n1 "$headers" | awk '{print $2}')
+          panel_location=$(grep -i '^location:' "$headers" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$panel_http" = 302
+          echo "$panel_location" | grep -q '/painel/login/'
+
+          api_http=$(curl -sS -o /tmp/linkedin-prod/api.json -w '%{http_code}' \
+            'https://www.codesolution.com.br/api/crm/prospecting/linkedin/summary?owner=ercilaine')
+          test "$api_http" = 401
+
+          echo "summary_http=$summary_http" >> "$GITHUB_OUTPUT"
+          echo "prospects_http=$prospects_http" >> "$GITHUB_OUTPUT"
+          echo "panel_http=$panel_http" >> "$GITHUB_OUTPUT"
+          echo "api_http=$api_http" >> "$GITHUB_OUTPUT"
+
+      - name: Persist LinkedIn production status
+        if: always()
+        env:
+          SUMMARY_HTTP: ${{ steps.check.outputs.summary_http }}
+          PROSPECTS_HTTP: ${{ steps.check.outputs.prospects_http }}
+          PANEL_HTTP: ${{ steps.check.outputs.panel_http }}
+          API_HTTP: ${{ steps.check.outputs.api_http }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'),e=process.env;
+          fs.writeFileSync('docs/linkedin-production-status.json', JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
+            outcome:e.CHECK_OUTCOME||'failure',owner:'ercilaine',
+            backendSummaryHttp:Number(e.SUMMARY_HTTP||0),backendProspectsHttp:Number(e.PROSPECTS_HTTP||0),
+            panelUnauthenticatedHttp:Number(e.PANEL_HTTP||0),panelExpectedBehavior:'redirect_to_login',
+            sameOriginApiUnauthenticatedHttp:Number(e.API_HTTP||0),
+            panelUrl:'https://www.codesolution.com.br/painel/prospeccao/linkedin/'
+          },null,2)+'\n');
+          NODE
+          git config user.name "Code Solution LinkedIn Validation Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/linkedin-production-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record LinkedIn production validation"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce LinkedIn production validation
+        if: always()
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: test "$CHECK_OUTCOME" = success
