@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-28T23:30:06.252Z",
+  "checkedAt": "2026-08-28T23:37:54.394Z",
   "database": "code-solution-crm",
   "databaseId": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d",
   "requiredTables": [
@@ -13,25 +13,26 @@
     "displayName": "Administrador Code Solution",
     "role": "admin",
     "active": true,
-    "sessionVersion": 28,
-    "passwordIterations": 180000,
+    "sessionVersion": 29,
+    "passwordIterations": 100000,
     "credentialHashMatches": true,
-    "updatedAt": "2026-08-28T23:20:43.714Z"
+    "updatedAt": "2026-08-28T23:35:54.804Z"
   },
   "legacyRecoveryDisabled": true,
   "bootstrapCredentialDisabled": true,
   "canonicalCredentialApplied": true,
+  "cloudflarePbkdf2FixApplied": true,
   "activeAdminSessions": 0,
   "live": {
     "attendantHealthHttp": 200,
-    "invalidLoginHttp": 500,
+    "invalidLoginHttp": 401,
     "loginPageHttp": 200,
     "loginPageContainsExpectedMarker": true
   },
   "loginUrl": "https://www.codesolution.com.br/painel/login/",
-  "credentialState": "canonical-owner-v4",
+  "credentialState": "canonical-owner-cloudflare-100k",
   "plaintextPasswordStored": false,
   "databaseOk": true,
-  "liveOk": false,
-  "ok": false
+  "liveOk": true,
+  "ok": true
 }
