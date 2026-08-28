@@ -1,6 +1,7 @@
 import baseRuntime from './lead-email-runtime.js';
 import { AUTONOMY_AGENTS, handleAutonomyApi, runAutonomousOrchestrator } from './autonomous-os.js';
 import { OPERATIONAL_AGENTS, enrichAutonomySummaryResponse, handleOperationalAgentApi, runOperationalAgents } from './operational-agents.js';
+import { handleAutonomyTelemetryApi } from './autonomy-telemetry.js';
 import {
   AUTONOMY_POLICY_VERSION,
   RESILIENCE_AGENT,
@@ -11,7 +12,7 @@ import {
   runAutonomyMaintenance,
 } from './autonomy-resilience.js';
 
-const AUTONOMY_BUILD = 'autonomous-os-2026-08-27.1';
+const AUTONOMY_BUILD = 'autonomous-os-2026-08-28.2';
 
 export default {
   async fetch(request, env, ctx) {
@@ -37,6 +38,9 @@ export default {
         headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
       });
     }
+
+    const telemetryApi = await handleAutonomyTelemetryApi(request, env);
+    if (telemetryApi) return telemetryApi;
 
     const resilienceApi = await handleResilienceApi(request, env);
     if (resilienceApi) return resilienceApi;
