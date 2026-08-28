@@ -25,6 +25,24 @@ function extract(html, re, label) {
   return match[0];
 }
 
+function extractDivById(html, id, label = id) {
+  const idNeedle = `id="${id}"`;
+  const idPos = html.indexOf(idNeedle);
+  if (idPos < 0) throw new Error(`Panel shell contract missing: ${label}`);
+  const start = html.lastIndexOf('<div', idPos);
+  if (start < 0) throw new Error(`Panel shell contract missing opening div: ${label}`);
+  const tokenRe = /<div\b[^>]*>|<\/div>/gi;
+  tokenRe.lastIndex = start;
+  let depth = 0;
+  let token;
+  while ((token = tokenRe.exec(html))) {
+    if (/^<div\b/i.test(token[0])) depth += 1;
+    else depth -= 1;
+    if (depth === 0) return html.slice(start, tokenRe.lastIndex);
+  }
+  throw new Error(`Panel shell contract missing closing div: ${label}`);
+}
+
 let source = await fs.readFile(sourcePath, 'utf8');
 source = addLink(source);
 await fs.writeFile(sourcePath, source);
@@ -34,12 +52,14 @@ if (!target.includes('class="cs-sidebar"')) {
   const style = extract(source, /<style data-cs-panel-shell>[\s\S]*?<\/style>/, 'style');
   let sidebar = extract(source, /<aside class="cs-sidebar"[\s\S]*?<\/aside>/, 'sidebar');
   const mobile = extract(source, /<button[^>]*id="csMobileMenu"[\s\S]*?<\/button>/, 'mobile menu');
-  const notifications = extract(source, /<div[^>]*id="csNotifications"[\s\S]*?<\/div>\s*<\/div>/, 'notifications');
-  const toast = extract(source, /<div[^>]*id="csLeadToast"[\s\S]*?<\/div>/, 'lead toast');
+  const notifications = extractDivById(source, 'csNotifications', 'notifications');
+  const toast = extractDivById(source, 'csLeadToast', 'lead toast');
   const shellScript = extract(source, /<script data-cs-panel-shell>[\s\S]*?<\/script>/, 'shell script');
   sidebar = addLink(sidebar).replace(/class="cs-side-link active"/g, 'class="cs-side-link"');
   sidebar = sidebar.replace(/class="cs-side-link" href="\/painel\/prospeccao\/linkedin\/"/, 'class="cs-side-link active" href="/painel/prospeccao/linkedin/"');
-  target = target.replace('</head>', `${style}</head>`).replace(/<body[^>]*>/, (m) => `${m}${mobile}${sidebar}${notifications}${toast}`).replace('</body>', `${shellScript}</body>`);
+  target = target.replace('</head>', `${style}</head>`)
+    .replace(/<body[^>]*>/, (m) => `${m}${mobile}${sidebar}${notifications}${toast}`)
+    .replace('</body>', `${shellScript}</body>`);
 }
 target = addLink(target);
 await fs.writeFile(targetPath, target);
