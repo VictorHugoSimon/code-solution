@@ -58,7 +58,9 @@ assert {'proposal_id','lead_id','event_type','actor','note','metadata_json','cre
 
 admin = conn.execute("SELECT username,role,password_hash,password_salt,password_iterations,active FROM panel_users WHERE username='admin'").fetchone()
 assert admin and admin[0] == 'admin' and admin[1] == 'admin' and admin[5] == 1
-assert len(admin[2]) == 64 and len(admin[3]) >= 32 and admin[4] >= 180000
+# Cloudflare Workers WebCrypto currently caps PBKDF2 at 100,000 iterations.
+# The schema contract therefore requires the production-compatible value exactly.
+assert len(admin[2]) == 64 and len(admin[3]) >= 32 and admin[4] == 100000
 
 conn.execute("INSERT INTO panel_audit_log (id,user_id,username,action,created_at) VALUES ('audit-test','panel-admin-primary','admin','schema_test',datetime('now'))")
 assert conn.execute("SELECT count(*) FROM panel_audit_log WHERE action='schema_test'").fetchone()[0] == 1
