@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-08-28T15:02:00.442Z",
+  "sourceCommit": "bd6ab07d20d476b30de3cf8b9b038069ba5d3d1b",
+  "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
+  "project": "codesolution-site",
+  "username": "admin",
+  "passwordStoredInRepository": false,
+  "passwordAlgorithm": "PBKDF2-SHA256/100000",
+  "credentials": "success",
+  "adminReset": "success",
+  "build": "success",
+  "pagesSecretSync": "success",
+  "pagesDeploy": "success",
+  "liveLoginSmoke": "success",
+  "loginUrl": "https://www.codesolution.com.br/painel/login/",
+  "crmUrl": "https://www.codesolution.com.br/painel/crm/"
+}
