@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-08-28T18:27:00.523Z",
+  "sourceCommit": "316180c08b9e8c048ef37696ce8d63ee3b5dea41",
+  "outcome": "success",
+  "owner": "ercilaine",
+  "backendSummaryHttp": 200,
+  "backendProspectsHttp": 200,
+  "panelUnauthenticatedHttp": 302,
+  "panelExpectedBehavior": "redirect_to_login",
+  "sameOriginApiUnauthenticatedHttp": 401,
+  "panelUrl": "https://www.codesolution.com.br/painel/prospeccao/linkedin/"
+}
