@@ -185,3 +185,23 @@ CREATE INDEX IF NOT EXISTS idx_acquisition_events_created ON acquisition_events(
 CREATE INDEX IF NOT EXISTS idx_acquisition_events_name_created ON acquisition_events(event_name, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_acquisition_events_session_created ON acquisition_events(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_acquisition_events_source_created ON acquisition_events(source, created_at DESC);
+
+-- Autonomous social publishing. Access tokens remain Cloudflare runtime secrets;
+-- this table stores only publication state, external IDs and sanitized failures.
+CREATE TABLE IF NOT EXISTS social_publications (
+  id TEXT PRIMARY KEY,
+  content_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  external_id TEXT,
+  permalink TEXT,
+  trigger_type TEXT,
+  error_text TEXT,
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  metadata_json TEXT,
+  FOREIGN KEY (content_id) REFERENCES growth_content(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_social_publications_content ON social_publications(content_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_social_publications_channel_status ON social_publications(channel, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_social_publications_published ON social_publications(published_at DESC);
