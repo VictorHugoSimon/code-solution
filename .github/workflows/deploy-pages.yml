@@ -42,7 +42,8 @@ jobs:
             deploy/index.html deploy/servicos/index.html deploy/setores/index.html deploy/calculadora/index.html \
             deploy/diagnostico/index.html deploy/assistente/index.html deploy/privacidade/index.html \
             deploy/cases/index.html deploy/cases/sos-truck/index.html deploy/cases/tonini/index.html deploy/cases/code-solution/index.html \
-            deploy/painel/index.html deploy/painel/crm/index.html deploy/painel/atendimento/index.html deploy/painel/agenda/index.html \
+            deploy/painel/index.html deploy/painel/executivo/index.html deploy/painel/delivery/index.html \
+            deploy/painel/crm/index.html deploy/painel/atendimento/index.html deploy/painel/agenda/index.html \
             deploy/painel/prospeccao/index.html deploy/painel/marketing/index.html deploy/painel/marketing/acquisition.js \
             deploy/painel/marketing/campaign-efficiency.js deploy/painel/inteligencia/index.html deploy/painel/growth/index.html \
             deploy/painel/relatorios/index.html deploy/painel/relatorios/saude/index.html deploy/painel/usuarios/index.html deploy/painel/conta/index.html; do
@@ -53,6 +54,10 @@ jobs:
           grep -q 'panelAllowed' deploy/_worker.js
           grep -q "pathname.startsWith('/painel/conta')" deploy/_worker.js
           grep -q 'filterPanelNavigation' deploy/_worker.js
+          grep -q 'Cockpit Executivo' deploy/painel/executivo/index.html
+          grep -q 'Próximas melhores ações' deploy/painel/executivo/index.html
+          grep -q 'Central de Delivery' deploy/painel/delivery/index.html
+          grep -q 'Checklist de kickoff' deploy/painel/delivery/index.html
           grep -q '/painel/usuarios/' deploy/painel/usuarios/index.html
           grep -q 'Minha segurança' deploy/painel/usuarios/index.html
           grep -q 'Minha Conta' deploy/painel/conta/index.html
@@ -129,7 +134,7 @@ jobs:
           grep -q 'name="username"' /tmp/login.html
           grep -q 'name="password"' /tmp/login.html
 
-          for panel in /painel/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/relatorios/saude/ /painel/usuarios/ /painel/conta/; do
+          for panel in /painel/ /painel/executivo/ /painel/delivery/ /painel/crm/ /painel/atendimento/ /painel/agenda/ /painel/prospeccao/ /painel/marketing/ /painel/inteligencia/ /painel/growth/ /painel/relatorios/ /painel/relatorios/saude/ /painel/usuarios/ /painel/conta/; do
             h=$(mktemp)
             curl -sS -D "$h" -o /dev/null "https://www.codesolution.com.br${panel}"
             test "$(head -n1 "$h" | awk '{print $2}')" = 302
@@ -172,6 +177,8 @@ jobs:
             echo '- Public smoke: `${{ steps.smoke.outcome }}`'
             echo '- CRM backend smoke: `${{ steps.backend.outcome }}`'
             echo '- CRM login: https://www.codesolution.com.br/painel/login/'
+            echo '- Executive cockpit: https://www.codesolution.com.br/painel/executivo/'
+            echo '- Delivery center: https://www.codesolution.com.br/painel/delivery/'
             echo '- Health panel: https://www.codesolution.com.br/painel/relatorios/saude/'
             echo '- Marketing ranking: https://www.codesolution.com.br/painel/marketing/'
             echo '- Personal account: https://www.codesolution.com.br/painel/conta/'
@@ -196,4 +203,4 @@ jobs:
           test "$SMOKE" = success
           test "$BACKEND" = success
 
-# release-trigger: pipe-safe-smoke-2026-08-27
+# release-trigger: executive-delivery-gate-2026-08-28
