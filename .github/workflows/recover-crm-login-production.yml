@@ -1,0 +1,166 @@
+name: Recover CRM login production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-crm-login-production.yml'
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: recover-code-solution-crm-login
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, 'OPS: release Code Solution Pages')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and validate exact release
+        id: build
+        run: |
+          set -euo pipefail
+          npm run blog:index
+          npm run blog:static
+          npm run pages:prepare
+          npm run check:bundled-surfaces
+          node --check deploy/_worker.js
+          grep -q "const LOGIN_USERNAME = 'admin'" deploy/_worker.js
+          grep -q 'LOGIN_PASSWORD_SHA256' deploy/_worker.js
+          grep -q 'Acesso ao CRM' deploy/_worker.js
+          grep -q 'name=\"username\"' deploy/_worker.js
+          grep -q 'cs_panel_session' deploy/_worker.js
+
+      - name: Validate personal Cloudflare credentials
+        id: credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CRM_ADMIN_KEY"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "cad25fe6c91871bbafb58236cf9b9b81"
+
+      - name: Sync CRM session secret to Pages
+        id: secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CRM_ADMIN_KEY" | npx wrangler@4 pages secret put CRM_ADMIN_KEY --project-name=codesolution-site
+          npx wrangler@4 pages secret list --project-name=codesolution-site > /tmp/pages-secrets.txt
+          grep -q 'CRM_ADMIN_KEY' /tmp/pages-secrets.txt
+
+      - name: Deploy Pages production
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --branch=main --commit-hash="$GITHUB_SHA" --commit-message="CRM login recovery $GITHUB_SHA"
+
+      - name: Validate public login and CRM protection
+        id: public
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 12); do
+            login_http=$(curl -sS -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/ || true)
+            if [ "$login_http" = 200 ] && grep -q 'Acesso ao CRM' /tmp/login.html && grep -q 'name="username"' /tmp/login.html; then ok=1; break; fi
+            sleep 5
+          done
+          test "$ok" = 1
+
+          h=$(mktemp)
+          curl -sS -D "$h" -o /dev/null https://www.codesolution.com.br/painel/crm/
+          panel_http=$(head -n1 "$h" | awk '{print $2}')
+          panel_location=$(grep -i '^location:' "$h" | tail -n1 | tr -d '\r' | cut -d' ' -f2-)
+          test "$panel_http" = 302
+          echo "$panel_location" | grep -q '/painel/login/'
+
+          api_http=$(curl -sS -o /tmp/api.json -w '%{http_code}' https://www.codesolution.com.br/api/crm/summary)
+          test "$api_http" = 401
+
+      - name: Validate backend CRM secret
+        id: backend
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          http=$(curl -sS -o /tmp/summary.json -w '%{http_code}' -H "x-crm-key: ${CRM_ADMIN_KEY}" https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/crm/summary)
+          test "$http" = 200
+          node -e "const x=require('/tmp/summary.json');if(x.ok!==true)process.exit(1)"
+
+      - name: Persist recovery evidence
+        if: always()
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          CREDENTIALS: ${{ steps.credentials.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          PUBLIC: ${{ steps.public.outcome }}
+          BACKEND: ${{ steps.backend.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs'), e=process.env;
+          const out={
+            checkedAt:new Date().toISOString(),
+            sourceCommit:e.SOURCE_SHA,
+            accountId:'cad25fe6c91871bbafb58236cf9b9b81',
+            project:'codesolution-site',
+            build:e.BUILD||'skipped',
+            credentials:e.CREDENTIALS||'skipped',
+            crmAdminSecretSync:e.SECRET||'skipped',
+            pagesDeploy:e.DEPLOY||'skipped',
+            publicLoginSmoke:e.PUBLIC||'skipped',
+            backendCrmSmoke:e.BACKEND||'skipped',
+            loginUrl:'https://www.codesolution.com.br/painel/login/',
+            username:'admin',
+            passwordStoredInRepo:false
+          };
+          fs.writeFileSync('docs/crm-login-production-status.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+          git config user.name "Code Solution Recovery Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/crm-login-production-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: record CRM login production recovery"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce recovery
+        if: always()
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          CREDENTIALS: ${{ steps.credentials.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          PUBLIC: ${{ steps.public.outcome }}
+          BACKEND: ${{ steps.backend.outcome }}
+        run: |
+          test "$BUILD" = success
+          test "$CREDENTIALS" = success
+          test "$SECRET" = success
+          test "$DEPLOY" = success
+          test "$PUBLIC" = success
+          test "$BACKEND" = success
