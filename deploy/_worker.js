@@ -148,6 +148,14 @@ async function resolveSession(request) {
 
 function panelAllowed(pathname, permissions) {
   const p = new Set(permissions);
+
+  // Super Admin: o perfil administrador recebe todas estas permissões no backend.
+  // Quando o conjunto completo está presente, qualquer módulo autenticado do painel
+  // é permitido, inclusive módulos novos que ainda não tenham regra individual.
+  const isSuperAdmin = ['overview','crm_read','crm_write','marketing','intelligence','growth','reports','users']
+    .every(permission => p.has(permission));
+  if (isSuperAdmin && (pathname === '/painel' || pathname.startsWith('/painel/'))) return true;
+
   if (pathname === '/painel' || pathname === '/painel/') return p.has('overview');
   if (pathname.startsWith('/painel/usuarios')) return p.has('users');
   if (pathname.startsWith('/painel/crm')) return p.has('crm_read');
@@ -158,6 +166,9 @@ function panelAllowed(pathname, permissions) {
   if (pathname.startsWith('/painel/inteligencia')) return p.has('intelligence');
   if (pathname.startsWith('/painel/growth')) return p.has('growth');
   if (pathname.startsWith('/painel/relatorios')) return p.has('reports');
+  if (pathname.startsWith('/painel/conta')) return p.has('overview');
+  if (pathname.startsWith('/painel/delivery')) return p.has('reports');
+  if (pathname.startsWith('/painel/executivo')) return p.has('reports');
   return false;
 }
 function hasPermission(session, permission) { return Boolean(session?.permissions?.includes(permission)); }
