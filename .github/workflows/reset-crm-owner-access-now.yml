@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   reset-and-validate:
-    if: github.event_name != 'issues' || github.event.issue.title == 'OPS: reset CRM owner access 2026-08-30'
+    if: "${{ github.event_name != 'issues' || github.event.issue.title == 'OPS: reset CRM owner access 2026-08-30' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
