@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-08-31T11:18:26.049Z",
+  "sourceCommit": "ded3425706459ab4e8b670f7a44dd8557591afe2",
+  "http": 200,
+  "runtimeReachable": true,
+  "configured": false,
+  "tokenConfigured": false,
+  "phoneIdConfigured": false,
+  "recipientConfigured": false,
+  "templateConfigured": false,
+  "mode": "free_form_text",
+  "note": "Free-form text depends on an open WhatsApp service window. Configure an approved template for reliable 24/7 alerts."
+}
