@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-30T22:54:28.397Z",
+  "checkedAt": "2026-08-31T11:47:59.071Z",
   "database": "code-solution-crm",
   "databaseId": "5f2a71bc-e3bf-4063-b52d-48ad11132e1d",
   "admin": {
@@ -7,10 +7,10 @@
     "displayName": "Administrador Code Solution",
     "role": "admin",
     "active": true,
-    "sessionVersion": 30,
+    "sessionVersion": 31,
     "passwordIterations": 100000,
     "credentialHashMatches": true,
-    "updatedAt": "2026-08-30T22:53:17.854Z"
+    "updatedAt": "2026-08-31T11:42:53.364Z"
   },
   "ownerResetApplied": true,
   "activeAdminSessions": 0,
@@ -21,7 +21,7 @@
     "loginPageContainsExpectedMarker": true
   },
   "loginUrl": "https://www.codesolution.com.br/painel/login/",
-  "credentialState": "owner-reset-2026-08-30",
+  "credentialState": "owner-reset-2026-08-31",
   "plaintextPasswordStored": false,
   "databaseOk": true,
   "liveOk": true,
