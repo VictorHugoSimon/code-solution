@@ -1,5 +1,6 @@
 name: Diagnose WhatsApp alerts
 
+# Recheck runtime after WhatsApp template configuration changes.
 on:
   push:
     branches: [main]
