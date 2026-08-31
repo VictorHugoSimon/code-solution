@@ -1,5 +1,5 @@
 name = "code-solution-atendente"
-main = "autonomy-entry-runtime.js"
+main = "whatsapp-alerts-runtime.js"
 compatibility_date = "2026-08-24"
 
 [[kv_namespaces]]
