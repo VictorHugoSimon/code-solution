@@ -54,7 +54,11 @@ export default {
       submitted = await readJson(request.clone());
     }
 
-    const response = await baseRuntime.fetch(request, env, ctx);
+    // The legacy base worker also contains a simple new-lead WhatsApp notifier.
+    // Hide only the WhatsApp bindings from that legacy path so the centralized
+    // notifier below is the single delivery owner and no duplicate alert is sent.
+    const downstreamEnv = isLeadCreate && whatsappConfigured(env) ? suppressLegacyWhatsApp(env) : env;
+    const response = await baseRuntime.fetch(request, downstreamEnv, ctx);
     if (!response.ok) return response;
 
     if (isLeadCreate && response.status === 201) {
@@ -184,7 +188,7 @@ async function sendWhatsAppAlert(env, message) {
         template: {
           name: templateName,
           language: { code: languageCode },
-          components: [{ type: 'body', parameters: [{ type: 'text', text: clean(message, 3500) }] }],
+          components: [{ type: 'body', parameters: [{ type: 'text', text: clean(message, 900) }] }],
         },
       }
     : {
@@ -213,6 +217,16 @@ async function sendWhatsAppAlert(env, message) {
 
 function whatsappConfigured(env) {
   return Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID && env.OWNER_WHATSAPP);
+}
+
+function suppressLegacyWhatsApp(env) {
+  const hidden = new Set(['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'OWNER_WHATSAPP']);
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (hidden.has(String(property))) return '';
+      return Reflect.get(target, property, receiver);
+    },
+  });
 }
 
 function authorizeAdmin(request, env) {
