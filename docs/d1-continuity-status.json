@@ -1,11 +1,12 @@
 {
-  "checkedAt": "2026-08-25T14:44:13.848Z",
-  "sourceCommit": "e09fe557f85926802d57c8359db569d6335bcfcf",
+  "checkedAt": "2026-08-31T23:16:00.821Z",
+  "sourceCommit": "fccef359b4c03b7189308a4acd8c9c36c826b860",
   "database": "code-solution-crm",
   "accountId": "cad25fe6c91871bbafb58236cf9b9b81",
   "timeTravelBookmark": "success",
   "ephemeralExport": "success",
   "temporaryRestoreTest": "success",
+  "restoreMode": "local-sqlite-capacity-fallback",
   "sensitiveBackupCommitted": false,
-  "restoreTarget": "temporary D1 deleted after test"
+  "restoreTarget": "ephemeral local SQLite deleted after test"
 }
