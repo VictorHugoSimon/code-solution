@@ -1,14 +1,10 @@
 name: Reset Code Solution CRM owner access 2026-08-31
 
-# Trigger marker: 2026-08-31 owner-approved reset v2
 on:
   push:
     branches: [main]
     paths:
-      - 'crm/migrations/0022_admin_owner_reset_20260831.sql'
       - '.github/workflows/reset-crm-owner-access-20260831.yml'
-  issues:
-    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +12,6 @@ permissions:
 
 jobs:
   reset-and-validate:
-    if: ${{ github.event_name != 'issues' || github.event.issue.title == 'OPS: reset CRM owner access 2026-08-31' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
