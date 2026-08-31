@@ -91,12 +91,12 @@ await fs.writeFile(path.join(dir, `${topic.slug}.json`), JSON.stringify(output, 
 console.log(`Generated ${topic.slug}`);
 
 async function generatePt(t) {
-  const prompt = `Você é estrategista de conteúdo B2B da Code Solution, empresa brasileira de software sob medida, integrações, automação, IA e dados.\n\nCrie um artigo em português do Brasil sobre: ${t.title}.\nDireção editorial: ${t.angle}\n\nRegras obrigatórias:\n- Público: gestores de tecnologia, operações, comercial e diretoria de empresas B2B.\n- Tom consultivo, concreto e profissional; evite hype e frases vazias.\n- Não invente estatísticas, ROI, clientes, certificações, pesquisas ou números.\n- Não faça alegações jurídicas ou médicas.\n- O texto deve ajudar o leitor a diagnosticar o próprio processo.\n- Inclua uma resposta direta no primeiro parágrafo, 4 a 6 seções H2, uma lista prática/checklist e FAQ com 3 perguntas H3.\n- Termine com CTA discreto para https://www.codesolution.com.br/diagnostico/ .\n- body deve ser HTML simples usando apenas p,h2,h3,ul,ol,li,strong,a.\n- Retorne APENAS JSON válido, sem markdown, exatamente com os campos: title, excerpt, category, readingTime, metaDescription, keywords (array de 4 a 6 strings), body.\n- category: ${t.category}.\n- title com até 80 caracteres; excerpt 120–200 caracteres; metaDescription 130–160 caracteres; body com pelo menos 3500 caracteres.`;
+  const prompt = `Você é estrategista de conteúdo B2B da Code Solution, empresa brasileira de software sob medida, integrações, automação, IA e dados.\n\nCrie um artigo em português do Brasil sobre: ${t.title}.\nDireção editorial: ${t.angle}\n\nRegras obrigatórias:\n- Público: gestores de tecnologia, operações, comercial e diretoria de empresas B2B.\n- Tom consultivo, concreto e profissional; evite hype e frases vazias.\n- Não invente estatísticas, ROI, clientes, certificações, pesquisas ou números.\n- Não faça alegações jurídicas ou médicas.\n- O texto deve ajudar o leitor a diagnosticar o próprio processo.\n- Inclua uma resposta direta no primeiro parágrafo, 4 a 6 seções H2, uma lista prática/checklist e FAQ com 3 perguntas H3.\n- Termine com CTA discreto para https://www.codesolution.com.br/diagnostico/ .\n- body deve ser HTML simples usando apenas p,h2,h3,ul,ol,li,strong,a.\n- Retorne APENAS JSON válido, sem markdown, exatamente com os campos: title, excerpt, category, readingTime, metaDescription, keywords (array de 4 a 6 strings), body.\n- Todos os valores string, inclusive body, devem estar entre aspas JSON duplas, nunca crases/backticks.\n- category: ${t.category}.\n- title com até 80 caracteres; excerpt 120–200 caracteres; metaDescription 130–160 caracteres; body com pelo menos 3500 caracteres.`;
   return callAi(prompt, 5000);
 }
 
 async function translateLocale(source, language, locale) {
-  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Return ONLY valid JSON with exactly: title, excerpt, category, readingTime, metaDescription, keywords (array), body. Keep body as simple HTML. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
+  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Return ONLY valid JSON with exactly: title, excerpt, category, readingTime, metaDescription, keywords (array), body. Keep body as simple HTML. Every string value, including body, must use valid JSON double quotes, never backticks. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
   return callAi(prompt, 5000);
 }
 
@@ -107,7 +107,7 @@ async function callAi(prompt, maxTokens) {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'system', content: 'Return strict JSON only.' }, { role: 'user', content: prompt }], max_tokens: maxTokens, temperature: 0.25 })
+      body: JSON.stringify({ messages: [{ role: 'system', content: 'Return strict JSON only. All string values must use JSON double quotes, never backticks.' }, { role: 'user', content: prompt }], max_tokens: maxTokens, temperature: 0.2 })
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Workers AI HTTP ${response.status}: ${text.slice(0,300)}`);
@@ -125,7 +125,60 @@ function parseJson(text) {
   const first = clean.indexOf('{');
   const last = clean.lastIndexOf('}');
   if (first < 0 || last <= first) throw new Error('JSON object not found');
-  return JSON.parse(clean.slice(first,last+1));
+  const candidate = clean.slice(first,last+1);
+  try {
+    return JSON.parse(candidate);
+  } catch (firstError) {
+    const repaired = repairTemplateLiteralStrings(candidate).replace(/,\s*([}\]])/g, '$1');
+    try {
+      return JSON.parse(repaired);
+    } catch (secondError) {
+      throw new Error(`${firstError.message}; repaired parse: ${secondError.message}`);
+    }
+  }
+}
+
+function repairTemplateLiteralStrings(input) {
+  let out = '';
+  let inDouble = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inDouble) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inDouble = false;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      out += ch;
+      continue;
+    }
+    if (ch !== '`') {
+      out += ch;
+      continue;
+    }
+    let value = '';
+    let closed = false;
+    for (i = i + 1; i < input.length; i++) {
+      const inner = input[i];
+      if (inner === '\\' && input[i + 1] === '`') {
+        value += '`';
+        i++;
+        continue;
+      }
+      if (inner === '`') {
+        closed = true;
+        break;
+      }
+      value += inner;
+    }
+    if (!closed) throw new Error('Unterminated template-literal string');
+    out += JSON.stringify(value);
+  }
+  return out;
 }
 
 function validateLocale(x, locale) {
