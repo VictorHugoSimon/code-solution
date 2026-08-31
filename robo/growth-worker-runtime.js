@@ -13,7 +13,7 @@ const BLOG_CRON = '0 12 * * 2,5';
 const PLAN_CRON = '0 13 * * 1';
 const PUBLISH_CRON = '30 13,17 * * 1-5';
 const METRICS_CRON = '0 20 * * 5';
-const BUILD = 'growth-orchestrator-2026-08-28.2';
+const BUILD = 'growth-orchestrator-2026-08-31.1';
 const PANEL_ORIGIN = 'https://www.codesolution.com.br';
 
 export default {
@@ -40,7 +40,8 @@ export default {
           build: BUILD,
           schedules: {
             daily: DAILY_CRON,
-            blog: BLOG_CRON,
+            blog: 'github-actions:generate-organic-blog',
+            legacyBlogCronIgnored: BLOG_CRON,
             weeklyPlan: PLAN_CRON,
             publisher: PUBLISH_CRON,
             metrics: METRICS_CRON,
@@ -82,7 +83,8 @@ export default {
       return;
     }
     if (cron === BLOG_CRON) {
-      return baseWorker.scheduled(event, env, ctx);
+      console.log('Legacy blog cron ignored: organic blog publishing is delegated to GitHub Actions generate-organic-blog.yml');
+      return;
     }
     if (cron === PLAN_CRON) {
       ctx.waitUntil(runWeeklyPlanAgent(env, { trigger: 'cron' }).catch(logError('weekly plan')));
