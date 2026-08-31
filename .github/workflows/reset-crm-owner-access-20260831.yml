@@ -1,0 +1,108 @@
+name: Reset Code Solution CRM owner access 2026-08-31
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crm/migrations/0022_admin_owner_reset_20260831.sql'
+      - '.github/workflows/reset-crm-owner-access-20260831.yml'
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reset-and-validate:
+    if: github.event_name != 'issues' || github.event.issue.title == 'OPS: reset CRM owner access 2026-08-31'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require personal Cloudflare account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'cad25fe6c91871bbafb58236cf9b9b81'
+
+      - name: Apply owner password reset
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --file=crm/migrations/0022_admin_owner_reset_20260831.sql --yes
+
+      - name: Validate D1 owner credential state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT username,display_name,role,active,session_version,password_iterations,CASE WHEN password_hash='a89529e67346667168389174979ba451a28b114feacdb1f70c6f55f4b3802527' AND password_salt='f70ea157fdaa5fc27859f6b001781d1b82211e631c309ce1' THEN 1 ELSE 0 END AS credential_hash_matches,updated_at FROM panel_users WHERE username='admin' COLLATE NOCASE LIMIT 1;" --json > /tmp/user.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT COUNT(*) AS reset_audit FROM panel_audit_log WHERE action='admin_owner_password_reset_2026_08_31';" --json > /tmp/audit.json
+          npx wrangler@4 d1 execute code-solution-crm --remote --command="SELECT COUNT(*) AS active_sessions FROM panel_sessions s JOIN panel_users u ON u.id=s.user_id WHERE u.username='admin' COLLATE NOCASE AND s.revoked_at IS NULL AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now');" --json > /tmp/sessions.json
+
+      - name: Validate live authentication surfaces
+        run: |
+          set -euo pipefail
+          health_http=$(curl -sS --max-time 25 -o /tmp/health.json -w '%{http_code}' https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/health)
+          invalid_http=$(curl -sS --max-time 25 -o /tmp/invalid.json -w '%{http_code}' -X POST https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev/auth/login -H 'content-type: application/json' -H 'origin: https://www.codesolution.com.br' --data '{"username":"admin","password":"__invalid__"}')
+          page_http=$(curl -sS --max-time 25 -o /tmp/login.html -w '%{http_code}' https://www.codesolution.com.br/painel/login/)
+          grep -qi 'Acesso ao CRM' /tmp/login.html
+          printf '%s' "$health_http" > /tmp/health-http.txt
+          printf '%s' "$invalid_http" > /tmp/invalid-http.txt
+          printf '%s' "$page_http" > /tmp/page-http.txt
+          test "$health_http" = 200
+          test "$invalid_http" = 401
+          test "$page_http" = 200
+
+      - name: Persist reset evidence
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const rows=p=>{const x=JSON.parse(fs.readFileSync(p,'utf8'));const a=Array.isArray(x)?x:(x.result||[]);return Array.isArray(a[0]?.results)?a[0].results:(Array.isArray(a?.results)?a.results:[])};
+          const read=p=>fs.readFileSync(p,'utf8').trim();
+          const u=rows('/tmp/user.json')[0]||{};
+          const a=rows('/tmp/audit.json')[0]||{};
+          const s=rows('/tmp/sessions.json')[0]||{};
+          const out={
+            checkedAt:new Date().toISOString(),
+            database:'code-solution-crm',
+            databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',
+            admin:{username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Boolean(Number(u.active||0)),sessionVersion:Number(u.session_version||0),passwordIterations:Number(u.password_iterations||0),credentialHashMatches:Boolean(Number(u.credential_hash_matches||0)),updatedAt:u.updated_at||null},
+            ownerResetApplied:Number(a.reset_audit||0)>0,
+            activeAdminSessions:Number(s.active_sessions||0),
+            live:{attendantHealthHttp:Number(read('/tmp/health-http.txt')),invalidLoginHttp:Number(read('/tmp/invalid-http.txt')),loginPageHttp:Number(read('/tmp/page-http.txt')),loginPageContainsExpectedMarker:true},
+            loginUrl:'https://www.codesolution.com.br/painel/login/',
+            credentialState:'owner-reset-2026-08-31',
+            plaintextPasswordStored:false
+          };
+          out.databaseOk=out.admin.username==='admin'&&out.admin.role==='admin'&&out.admin.active&&out.admin.passwordIterations===100000&&out.admin.credentialHashMatches&&out.ownerResetApplied;
+          out.liveOk=out.live.attendantHealthHttp===200&&out.live.invalidLoginHttp===401&&out.live.loginPageHttp===200;
+          out.ok=out.databaseOk&&out.liveOk;
+          fs.mkdirSync('docs',{recursive:true});
+          fs.writeFileSync('docs/admin-access-validation.json',JSON.stringify(out,null,2)+'\n');
+          if(!out.ok) process.exit(2);
+          NODE
+
+      - name: Commit evidence
+        run: |
+          git config user.name 'Code Solution Access Reset Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/admin-access-validation.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record CRM owner reset validation 2026-08-31'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce validation
+        run: node -e "const x=require('./docs/admin-access-validation.json'); if(!x.ok){console.error(JSON.stringify(x,null,2)); process.exit(1)}"
