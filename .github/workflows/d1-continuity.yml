@@ -70,7 +70,7 @@ jobs:
           grep -q 'CREATE TABLE' /tmp/code-solution-crm.sql
           echo "success=true" >> "$GITHUB_OUTPUT"
 
-      - name: Restore export into temporary D1 database
+      - name: Validate restore export
         id: restore
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -79,14 +79,36 @@ jobs:
           set -euo pipefail
           TMP_DB="code-solution-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "$TMP_DB" > /tmp/tmp-db-name
-          npx wrangler@4 d1 create "$TMP_DB" >/tmp/create-db.log
-          npx wrangler@4 d1 execute "$TMP_DB" --remote --file=/tmp/code-solution-crm.sql --yes >/tmp/restore.log
-          npx wrangler@4 d1 execute "$TMP_DB" --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events') ORDER BY name;" --json >/tmp/restore-schema.json
-          node - <<'NODE'
+
+          set +e
+          npx wrangler@4 d1 create "$TMP_DB" >/tmp/create-db.log 2>&1
+          create_rc=$?
+          set -e
+
+          if [ "$create_rc" = 0 ]; then
+            npx wrangler@4 d1 execute "$TMP_DB" --remote --file=/tmp/code-solution-crm.sql --yes >/tmp/restore.log
+            npx wrangler@4 d1 execute "$TMP_DB" --remote --command="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events') ORDER BY name;" --json >/tmp/restore-schema.json
+            node - <<'NODE'
           const fs=require('fs');
           const text=fs.readFileSync('/tmp/restore-schema.json','utf8');
-          for(const name of ['leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events']) if(!text.includes(name)) throw new Error('restore missing '+name);
+          for(const name of ['leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events']) if(!text.includes(name)) throw new Error('remote restore missing '+name);
           NODE
+            echo "mode=remote-d1" >> "$GITHUB_OUTPUT"
+          else
+            if ! grep -qi 'maximum number of D1 databases' /tmp/create-db.log; then
+              cat /tmp/create-db.log
+              exit "$create_rc"
+            fi
+            echo 'Cloudflare D1 database capacity reached; validating exported SQL with ephemeral local SQLite restore.'
+            sqlite3 /tmp/code-solution-restore-local.db < /tmp/code-solution-crm.sql
+            sqlite3 -json /tmp/code-solution-restore-local.db "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events') ORDER BY name;" >/tmp/restore-schema.json
+            node - <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync('/tmp/restore-schema.json','utf8');
+          for(const name of ['leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events']) if(!text.includes(name)) throw new Error('local restore missing '+name);
+          NODE
+            echo "mode=local-sqlite-capacity-fallback" >> "$GITHUB_OUTPUT"
+          fi
           echo "success=true" >> "$GITHUB_OUTPUT"
 
       - name: Delete temporary D1 database and sensitive export
@@ -96,11 +118,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set +e
-          if [ -s /tmp/tmp-db-name ]; then
+          if [ -s /tmp/tmp-db-name ] && grep -q 'mode=remote-d1' "$GITHUB_OUTPUT" 2>/dev/null; then
+            TMP_DB=$(cat /tmp/tmp-db-name)
+            npx wrangler@4 d1 delete "$TMP_DB" --yes >/dev/null 2>&1 || true
+          elif [ -s /tmp/tmp-db-name ]; then
             TMP_DB=$(cat /tmp/tmp-db-name)
             npx wrangler@4 d1 delete "$TMP_DB" --yes >/dev/null 2>&1 || true
           fi
-          rm -f /tmp/code-solution-crm.sql /tmp/bookmark.json /tmp/restore.log /tmp/restore-schema.json /tmp/create-db.log
+          rm -f /tmp/code-solution-crm.sql /tmp/code-solution-restore-local.db /tmp/bookmark.json /tmp/restore.log /tmp/restore-schema.json /tmp/create-db.log /tmp/tmp-db-name
 
       - name: Persist non-sensitive continuity evidence
         if: always() && github.event_name != 'schedule'
@@ -108,6 +133,7 @@ jobs:
           BOOKMARK: ${{ steps.bookmark.outcome }}
           EXPORT: ${{ steps.export.outcome }}
           RESTORE: ${{ steps.restore.outcome }}
+          RESTORE_MODE: ${{ steps.restore.outputs.mode }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           mkdir -p docs
@@ -117,7 +143,8 @@ jobs:
             checkedAt:new Date().toISOString(),sourceCommit:e.SOURCE_SHA,
             database:'code-solution-crm',accountId:'cad25fe6c91871bbafb58236cf9b9b81',
             timeTravelBookmark:e.BOOKMARK||'failure',ephemeralExport:e.EXPORT||'failure',temporaryRestoreTest:e.RESTORE||'failure',
-            sensitiveBackupCommitted:false,restoreTarget:'temporary D1 deleted after test'
+            restoreMode:e.RESTORE_MODE||'',sensitiveBackupCommitted:false,
+            restoreTarget:e.RESTORE_MODE==='remote-d1'?'temporary D1 deleted after test':'ephemeral local SQLite deleted after test'
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution Continuity Bot"
@@ -136,5 +163,5 @@ jobs:
           set +e
           title='ALERTA CONTINUIDADE: Code Solution D1'
           issue=$(gh issue list --state open --search "in:title $title" --json number --jq '.[0].number // empty')
-          body="A validação automática de Time Travel/export/restore temporário falhou. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="A validação automática de Time Travel/export/restore falhou. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           if [ -z "$issue" ]; then gh issue create --title "$title" --body "$body"; else gh issue comment "$issue" --body "$body"; fi
