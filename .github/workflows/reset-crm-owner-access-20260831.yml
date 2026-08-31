@@ -1,5 +1,6 @@
 name: Reset Code Solution CRM owner access 2026-08-31
 
+# Trigger marker: 2026-08-31 owner-approved reset
 on:
   push:
     branches: [main]
@@ -74,18 +75,7 @@ jobs:
           const u=rows('/tmp/user.json')[0]||{};
           const a=rows('/tmp/audit.json')[0]||{};
           const s=rows('/tmp/sessions.json')[0]||{};
-          const out={
-            checkedAt:new Date().toISOString(),
-            database:'code-solution-crm',
-            databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',
-            admin:{username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Boolean(Number(u.active||0)),sessionVersion:Number(u.session_version||0),passwordIterations:Number(u.password_iterations||0),credentialHashMatches:Boolean(Number(u.credential_hash_matches||0)),updatedAt:u.updated_at||null},
-            ownerResetApplied:Number(a.reset_audit||0)>0,
-            activeAdminSessions:Number(s.active_sessions||0),
-            live:{attendantHealthHttp:Number(read('/tmp/health-http.txt')),invalidLoginHttp:Number(read('/tmp/invalid-http.txt')),loginPageHttp:Number(read('/tmp/page-http.txt')),loginPageContainsExpectedMarker:true},
-            loginUrl:'https://www.codesolution.com.br/painel/login/',
-            credentialState:'owner-reset-2026-08-31',
-            plaintextPasswordStored:false
-          };
+          const out={checkedAt:new Date().toISOString(),database:'code-solution-crm',databaseId:'5f2a71bc-e3bf-4063-b52d-48ad11132e1d',admin:{username:u.username||'',displayName:u.display_name||'',role:u.role||'',active:Boolean(Number(u.active||0)),sessionVersion:Number(u.session_version||0),passwordIterations:Number(u.password_iterations||0),credentialHashMatches:Boolean(Number(u.credential_hash_matches||0)),updatedAt:u.updated_at||null},ownerResetApplied:Number(a.reset_audit||0)>0,activeAdminSessions:Number(s.active_sessions||0),live:{attendantHealthHttp:Number(read('/tmp/health-http.txt')),invalidLoginHttp:Number(read('/tmp/invalid-http.txt')),loginPageHttp:Number(read('/tmp/page-http.txt')),loginPageContainsExpectedMarker:true},loginUrl:'https://www.codesolution.com.br/painel/login/',credentialState:'owner-reset-2026-08-31',plaintextPasswordStored:false};
           out.databaseOk=out.admin.username==='admin'&&out.admin.role==='admin'&&out.admin.active&&out.admin.passwordIterations===100000&&out.admin.credentialHashMatches&&out.ownerResetApplied;
           out.liveOk=out.live.attendantHealthHttp===200&&out.live.invalidLoginHttp===401&&out.live.loginPageHttp===200;
           out.ok=out.databaseOk&&out.liveOk;
