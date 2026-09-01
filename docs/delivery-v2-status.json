@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-09-01T18:46:04.812Z",
+  "sourceCommit": "44e0c06d3d52746daa0985a507f32330c0863430",
+  "production": true,
+  "build": "autonomous-os-2026-09-01.delivery-v2",
+  "healthAgentPresent": true,
+  "shadowFirst": true,
+  "externalActionsExecuted": false,
+  "projects": {
+    "total": 0,
+    "byState": []
+  },
+  "backlog": {},
+  "openIncidents": [],
+  "lastRun": {
+    "projectsCreated": 0,
+    "backlogSeeded": 0,
+    "reportsGenerated": 0
+  },
+  "failMode": "fail_closed",
+  "gate": "delivery_external_activation"
+}
