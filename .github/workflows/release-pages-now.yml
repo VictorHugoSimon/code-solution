@@ -1,0 +1,13 @@
+name: Release Code Solution Pages now
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Use .github/workflows/deploy-pages.yml for production releases."
