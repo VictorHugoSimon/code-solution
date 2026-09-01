@@ -125,17 +125,58 @@ function parseJson(text) {
   const first = clean.indexOf('{');
   const last = clean.lastIndexOf('}');
   if (first < 0 || last <= first) throw new Error('JSON object not found');
-  const candidate = clean.slice(first,last+1);
+  const candidate = escapeControlCharsInJsonStrings(clean.slice(first,last+1));
   try {
     return JSON.parse(candidate);
   } catch (firstError) {
-    const repaired = repairTemplateLiteralStrings(candidate).replace(/,\s*([}\]])/g, '$1');
+    const repaired = escapeControlCharsInJsonStrings(repairTemplateLiteralStrings(candidate)).replace(/,\s*([}\]])/g, '$1');
     try {
       return JSON.parse(repaired);
     } catch (secondError) {
       throw new Error(`${firstError.message}; repaired parse: ${secondError.message}`);
     }
   }
+}
+
+function escapeControlCharsInJsonStrings(input) {
+  let out = '';
+  let inDouble = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (!inDouble) {
+      out += ch;
+      if (ch === '"') inDouble = true;
+      continue;
+    }
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      out += ch;
+      inDouble = false;
+      continue;
+    }
+    const code = ch.charCodeAt(0);
+    if (code < 0x20) {
+      if (ch === '\n') out += '\\n';
+      else if (ch === '\r') out += '\\r';
+      else if (ch === '\t') out += '\\t';
+      else if (ch === '\b') out += '\\b';
+      else if (ch === '\f') out += '\\f';
+      else out += `\\u${code.toString(16).padStart(4, '0')}`;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 function repairTemplateLiteralStrings(input) {
