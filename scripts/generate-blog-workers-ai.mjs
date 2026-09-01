@@ -6,6 +6,20 @@ const apiToken = process.env.CLOUDFLARE_API_TOKEN || '';
 const model = process.env.WORKERS_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast';
 if (!accountId || !apiToken) throw new Error('Cloudflare credentials are required');
 
+const articleSchema = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    excerpt: { type: 'string' },
+    category: { type: 'string' },
+    readingTime: { type: 'string' },
+    metaDescription: { type: 'string' },
+    keywords: { type: 'array', items: { type: 'string' } },
+    body: { type: 'string' }
+  },
+  required: ['title', 'excerpt', 'category', 'readingTime', 'metaDescription', 'keywords', 'body']
+};
+
 const topics = [
   {
     slug: 'como-automatizar-processos-ao-redor-do-erp-sem-trocar-o-sistema',
@@ -91,33 +105,54 @@ await fs.writeFile(path.join(dir, `${topic.slug}.json`), JSON.stringify(output, 
 console.log(`Generated ${topic.slug}`);
 
 async function generatePt(t) {
-  const prompt = `Você é estrategista de conteúdo B2B da Code Solution, empresa brasileira de software sob medida, integrações, automação, IA e dados.\n\nCrie um artigo em português do Brasil sobre: ${t.title}.\nDireção editorial: ${t.angle}\n\nRegras obrigatórias:\n- Público: gestores de tecnologia, operações, comercial e diretoria de empresas B2B.\n- Tom consultivo, concreto e profissional; evite hype e frases vazias.\n- Não invente estatísticas, ROI, clientes, certificações, pesquisas ou números.\n- Não faça alegações jurídicas ou médicas.\n- O texto deve ajudar o leitor a diagnosticar o próprio processo.\n- Inclua uma resposta direta no primeiro parágrafo, 4 a 6 seções H2, uma lista prática/checklist e FAQ com 3 perguntas H3.\n- Termine com CTA discreto para https://www.codesolution.com.br/diagnostico/ .\n- body deve ser HTML simples usando apenas p,h2,h3,ul,ol,li,strong,a.\n- Retorne APENAS JSON válido, sem markdown, exatamente com os campos: title, excerpt, category, readingTime, metaDescription, keywords (array de 4 a 6 strings), body.\n- Todos os valores string, inclusive body, devem estar entre aspas JSON duplas, nunca crases/backticks.\n- category: ${t.category}.\n- title com até 80 caracteres; excerpt 120–200 caracteres; metaDescription 130–160 caracteres; body com pelo menos 3500 caracteres.`;
+  const prompt = `Você é estrategista de conteúdo B2B da Code Solution, empresa brasileira de software sob medida, integrações, automação, IA e dados.\n\nCrie um artigo em português do Brasil sobre: ${t.title}.\nDireção editorial: ${t.angle}\n\nRegras obrigatórias:\n- Público: gestores de tecnologia, operações, comercial e diretoria de empresas B2B.\n- Tom consultivo, concreto e profissional; evite hype e frases vazias.\n- Não invente estatísticas, ROI, clientes, certificações, pesquisas ou números.\n- Não faça alegações jurídicas ou médicas.\n- O texto deve ajudar o leitor a diagnosticar o próprio processo.\n- Inclua uma resposta direta no primeiro parágrafo, 4 a 6 seções H2, uma lista prática/checklist e FAQ com 3 perguntas H3.\n- Termine com CTA discreto para https://www.codesolution.com.br/diagnostico/ .\n- body deve ser HTML simples usando apenas p,h2,h3,ul,ol,li,strong,a.\n- Preencha exatamente os campos do schema solicitado.\n- category: ${t.category}.\n- title com até 80 caracteres; excerpt 120–200 caracteres; metaDescription 130–160 caracteres; body com pelo menos 3500 caracteres.`;
   return callAi(prompt, 5000);
 }
 
 async function translateLocale(source, language, locale) {
-  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Return ONLY valid JSON with exactly: title, excerpt, category, readingTime, metaDescription, keywords (array), body. Keep body as simple HTML. Every string value, including body, must use valid JSON double quotes, never backticks. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
+  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Fill exactly the requested structured fields. Keep body as simple HTML. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
   return callAi(prompt, 5000);
 }
 
 async function callAi(prompt, maxTokens) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
   let last = '';
+  let lastError = '';
   for (let attempt=1; attempt<=3; attempt++) {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'system', content: 'Return strict JSON only. All string values must use JSON double quotes, never backticks.' }, { role: 'user', content: prompt }], max_tokens: maxTokens, temperature: 0.2 })
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: 'Return the requested structured article object only. Keep facts conservative and preserve HTML in body.' },
+          { role: 'user', content: prompt }
+        ],
+        response_format: { type: 'json_schema', json_schema: articleSchema },
+        max_tokens: maxTokens,
+        temperature: 0.2
+      })
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`Workers AI HTTP ${response.status}: ${text.slice(0,300)}`);
+    if (!response.ok) {
+      lastError = `Workers AI HTTP ${response.status}: ${text.slice(0,300)}`;
+      if (attempt === 3) throw new Error(lastError);
+      continue;
+    }
     const envelope = JSON.parse(text);
-    last = envelope?.result?.response ?? envelope?.result?.output_text ?? '';
+    if (envelope?.success === false) {
+      lastError = `Workers AI API error: ${JSON.stringify(envelope.errors || []).slice(0,300)}`;
+      if (attempt === 3) throw new Error(lastError);
+      continue;
+    }
+    const raw = envelope?.result?.response ?? envelope?.result?.output_text ?? '';
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+    last = String(raw || '');
     try { return parseJson(last); } catch (error) {
-      if (attempt === 3) throw new Error(`Workers AI invalid JSON after retries: ${String(error.message).slice(0,200)}`);
+      lastError = String(error.message);
+      if (attempt === 3) throw new Error(`Workers AI invalid structured response after retries: ${lastError.slice(0,200)}`);
     }
   }
-  throw new Error(`Workers AI returned no usable response: ${String(last).slice(0,200)}`);
+  throw new Error(`Workers AI returned no usable response: ${(lastError || last).slice(0,200)}`);
 }
 
 function parseJson(text) {
