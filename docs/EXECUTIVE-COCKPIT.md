@@ -1,6 +1,6 @@
-# Code Solution — Cockpit Executivo v1
+# Code Solution — Cockpit Executivo v2
 
-Status: implementação integrada ao pipeline de Pages em 28/08/2026.
+Status: **Executive Agent ativo + Cockpit Executivo ampliado com Meta x Realizado em 01/09/2026.**
 
 ## Objetivo
 
@@ -10,11 +10,11 @@ Dar ao responsável pela Code Solution uma visão única e operacional do negóc
 
 `/painel/executivo/`
 
-## Escopo v1
+## Escopo atual
 
-O cockpit é **read-only** e consome somente APIs administrativas já existentes e protegidas por sessão do painel.
+O cockpit é **read-only** e consome somente APIs administrativas protegidas por sessão do painel.
 
-Indicadores:
+Indicadores principais:
 - pipeline aberto;
 - leads quentes;
 - leads novos acima do SLA de 2 horas para primeiro contato;
@@ -26,20 +26,48 @@ Indicadores:
 Blocos:
 - Brief Executivo automático;
 - Próximas Melhores Ações;
+- Meta x Realizado de aquisição;
 - Oportunidades Prioritárias;
 - Decisões & Governança;
-- atalhos para Agentes, Propostas, Agenda e Marketing.
+- atalhos para Agentes, Propostas, Agenda, Delivery e Marketing.
 
-## Regras de priorização
+## Executive Agent
 
-A prioridade é calculada usando, nesta ordem:
+O agente `executive` está ativo dentro de `robo/operational-agents.js` e roda no ciclo do Autonomous OS.
+
+Comportamento:
+- gera no máximo um brief por data de São Paulo;
+- persiste o histórico em `executive_briefs`;
+- consolida CRM, propostas, aprovações, Growth, alertas, Delivery e execuções autônomas das últimas 24 horas;
+- registra prioridades baseadas em fatos observados;
+- não executa ações externas;
+- registra execução e decisão no audit trail do Autonomous OS.
+
+## Meta x Realizado
+
+A camada `deploy/painel/executivo/goals.js` consome:
+
+`GET /api/crm/acquisition/goals?days=7`
+
+Ela mostra, por canal ativo/configurado:
+- sessões realizadas x meta;
+- leads realizados x meta;
+- ganhos realizados x meta;
+- progresso percentual;
+- recomendação do canal com maior gap operacional.
+
+As metas vêm da tabela `acquisition_channel_goals`; não são previsões nem números inventados pelo agente.
+
+## Regras de priorização comercial
+
+A prioridade principal do cockpit considera, nesta ordem:
 1. SLA de primeiro contato estourado;
 2. follow-up vencido;
 3. temperatura quente;
 4. ausência de próxima ação;
 5. Lead Score.
 
-O cockpit não inventa metas, valores, prazos ou probabilidades. Ele apenas resume dados presentes no CRM e no Autonomous OS.
+A recomendação de aquisição usa os gaps observados de sessões, leads e ganhos em relação às metas configuradas.
 
 ## Segurança
 
@@ -48,24 +76,36 @@ O cockpit não inventa metas, valores, prazos ou probabilidades. Ele apenas resu
 - não executa ações externas;
 - não aprova propostas ou tarefas automaticamente;
 - não altera estágio, preço, prazo ou dados do lead;
+- metas são lidas do CRM e nunca fabricadas;
 - preserva a política `fail closed` do Autonomous OS.
 
 ## Integração no build
 
 `scripts/enhance-executive-cockpit.mjs`:
-- gera `deploy/painel/executivo/index.html`;
+- valida `deploy/painel/executivo/index.html`;
+- valida a camada `goals.js`;
+- injeta `goals.js` no Cockpit Executivo quando necessário;
 - injeta o link **Executivo** na navegação lateral das superfícies existentes do painel;
-- valida contratos mínimos do cockpit;
-- roda depois de `normalize-panel-nav.mjs` dentro de `npm run pages:prepare`.
+- roda dentro de `npm run pages:prepare`.
 
-## Próximas evoluções
+## Estado da Onda 5
 
-1. Executive Agent com brief diário persistido e histórico;
-2. metas comerciais configuráveis (lead, pipeline, receita, SLA e propostas);
-3. comparação Meta x Realizado;
-4. alertas de anomalia e tendência;
-5. previsão de pipeline com metodologia explícita e auditável;
-6. recomendação de próxima melhor ação registrada no audit trail;
-7. custos/latência por agente;
-8. visão de clientes ganhos, onboarding e delivery;
-9. resumo executivo diário por e-mail/WhatsApp somente após configuração dos conectores oficiais e aprovação de política.
+Concluído:
+- [x] brief diário persistido;
+- [x] pipeline comercial;
+- [x] aquisição/Growth;
+- [x] propostas;
+- [x] Delivery/handoffs;
+- [x] saúde/autonomia e alertas;
+- [x] anomalias/prioridades;
+- [x] decisões aguardando aprovação;
+- [x] Meta x Realizado de aquisição;
+- [x] próxima melhor ação comercial no cockpit;
+- [x] recomendação de canal baseada em gap de meta.
+
+Evoluções posteriores, não bloqueantes:
+1. metas adicionais de receita/pipeline/SLA configuráveis pela interface;
+2. tendência temporal e comparação semana contra semana;
+3. previsão de pipeline com metodologia explícita e auditável;
+4. custos/latência por agente;
+5. resumo executivo por e-mail/WhatsApp após conectores oficiais estarem configurados.
