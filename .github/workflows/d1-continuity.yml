@@ -101,6 +101,10 @@ jobs:
             fi
             echo 'Cloudflare D1 database capacity reached; validating exported SQL with ephemeral local SQLite restore.'
             sqlite3 /tmp/code-solution-restore-local.db < /tmp/code-solution-crm.sql
+            integrity=$(sqlite3 /tmp/code-solution-restore-local.db 'PRAGMA integrity_check;')
+            test "$integrity" = "ok"
+            foreign_keys=$(sqlite3 /tmp/code-solution-restore-local.db 'PRAGMA foreign_key_check;')
+            test -z "$foreign_keys"
             sqlite3 -json /tmp/code-solution-restore-local.db "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('leads','lead_events','crm_tasks','crm_alerts','lead_acquisition_links','acquisition_events') ORDER BY name;" >/tmp/restore-schema.json
             node - <<'NODE'
           const fs=require('fs');
@@ -118,10 +122,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set +e
-          if [ -s /tmp/tmp-db-name ] && grep -q 'mode=remote-d1' "$GITHUB_OUTPUT" 2>/dev/null; then
-            TMP_DB=$(cat /tmp/tmp-db-name)
-            npx wrangler@4 d1 delete "$TMP_DB" --yes >/dev/null 2>&1 || true
-          elif [ -s /tmp/tmp-db-name ]; then
+          if [ -s /tmp/tmp-db-name ]; then
             TMP_DB=$(cat /tmp/tmp-db-name)
             npx wrangler@4 d1 delete "$TMP_DB" --yes >/dev/null 2>&1 || true
           fi
@@ -144,6 +145,7 @@ jobs:
             database:'code-solution-crm',accountId:'cad25fe6c91871bbafb58236cf9b9b81',
             timeTravelBookmark:e.BOOKMARK||'failure',ephemeralExport:e.EXPORT||'failure',temporaryRestoreTest:e.RESTORE||'failure',
             restoreMode:e.RESTORE_MODE||'',sensitiveBackupCommitted:false,
+            sqliteIntegrityCheck:e.RESTORE_MODE==='local-sqlite-capacity-fallback'?'required':'not-applicable',
             restoreTarget:e.RESTORE_MODE==='remote-d1'?'temporary D1 deleted after test':'ephemeral local SQLite deleted after test'
           },null,2)+'\n');
           NODE
