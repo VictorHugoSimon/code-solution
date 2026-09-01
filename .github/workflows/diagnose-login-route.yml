@@ -1,4 +1,4 @@
-# Login route revalidation marker: 2026-08-28 final admin credential reset
+# Login route revalidation marker: 2026-09-01 final CRM admin credential reset v2
 name: Diagnose CRM login route
 
 on:
