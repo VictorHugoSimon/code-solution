@@ -1,0 +1,124 @@
+name: Validate Delivery Agent v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'robo/delivery-agent-v2.js'
+      - 'robo/autonomy-entry-runtime.js'
+      - 'crm/migrations/0023_delivery_agent_v2.sql'
+      - '.github/workflows/validate-delivery-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-delivery-v2-production
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate source and schema locally
+        run: |
+          set -euo pipefail
+          node --check robo/delivery-agent-v2.js
+          node --check robo/autonomy-entry-runtime.js
+          node --check deploy/painel/delivery/v2.js
+          node --check scripts/enhance-delivery-v2.mjs
+          python3 scripts/check-crm-schema.py
+
+      - name: Wait for Delivery v2 Worker release
+        env:
+          ATTENDANT: https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            if curl -fsS --max-time 15 "$ATTENDANT/autonomy/health" >/tmp/health.json 2>/dev/null; then
+              if node - <<'NODE'
+          const x=require('/tmp/health.json');
+          if(x.ok!==true) process.exit(1);
+          if(x.build!=='autonomous-os-2026-09-01.delivery-v2') process.exit(1);
+          if(!Array.isArray(x.agents)||!x.agents.includes('delivery-v2')) process.exit(1);
+          if(x.delivery?.version!==2||x.delivery?.shadowFirst!==true||x.delivery?.externalActionsExecuted!==false) process.exit(1);
+          if(!Array.isArray(x.approvalGates)||!x.approvalGates.includes('delivery_external_activation')) process.exit(1);
+          NODE
+              then
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo '::error::Delivery v2 build did not become active in the expected window.'
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
+
+      - name: Validate authenticated Delivery v2 contracts
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+          ATTENDANT: https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$ATTENDANT/crm/autonomy/delivery/summary")" = 401
+
+          for route in summary projects; do
+            http=$(curl -sS --max-time 25 -o "/tmp/delivery-${route}.json" -w '%{http_code}' "$ATTENDANT/crm/autonomy/delivery/$route" -H "x-crm-key: $CRM_ADMIN_KEY")
+            test "$http" = 200
+            ROUTE="$route" node - <<'NODE'
+          const x=require(`/tmp/delivery-${process.env.ROUTE}.json`);
+          if(x.ok!==true) throw new Error('Delivery v2 authenticated contract failed');
+          NODE
+          done
+
+          run_http=$(curl -sS --max-time 35 -o /tmp/delivery-run.json -w '%{http_code}' "$ATTENDANT/crm/autonomy/delivery/run" -X POST -H "x-crm-key: $CRM_ADMIN_KEY" -H 'content-type: application/json' --data '{}')
+          test "$run_http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/delivery-run.json');
+          if(x.ok!==true) throw new Error('Delivery v2 run failed');
+          if(x.externalActionsExecuted!==false) throw new Error('Delivery v2 must never execute external actions');
+          for(const key of ['projectsCreated','backlogSeeded','reportsGenerated']) if(typeof x[key]!=='number') throw new Error(`missing ${key}`);
+          NODE
+
+          curl -fsS --max-time 25 "$ATTENDANT/crm/autonomy/delivery/summary" -H "x-crm-key: $CRM_ADMIN_KEY" >/tmp/delivery-summary-after.json
+          node - <<'NODE'
+          const x=require('/tmp/delivery-summary-after.json');
+          if(x.ok!==true||x.policy?.failMode!=='fail_closed'||x.policy?.shadowFirst!==true||x.externalActionsExecuted!==false) throw new Error('Delivery v2 safety contract invalid');
+          NODE
+
+      - name: Persist Delivery v2 production status
+        if: success()
+        run: |
+          mkdir -p docs
+          node - <<'NODE'
+          const fs=require('fs');
+          const health=require('/tmp/health.json');
+          const summary=require('/tmp/delivery-summary-after.json');
+          const run=require('/tmp/delivery-run.json');
+          fs.writeFileSync('docs/delivery-v2-status.json',JSON.stringify({
+            checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,
+            production:true,build:health.build,healthAgentPresent:health.agents?.includes('delivery-v2')===true,
+            shadowFirst:health.delivery?.shadowFirst===true,externalActionsExecuted:false,
+            projects:summary.projects||{},backlog:summary.backlog||{},openIncidents:summary.openIncidents||[],
+            lastRun:{projectsCreated:run.projectsCreated||0,backlogSeeded:run.backlogSeeded||0,reportsGenerated:run.reportsGenerated||0},
+            failMode:summary.policy?.failMode||'',gate:summary.policy?.externalActivationGate||''
+          },null,2)+'\n');
+          NODE
+          git config user.name 'Code Solution Delivery V2 Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/delivery-v2-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore: record Delivery v2 production status'
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 2
+          done
+          echo '::warning::Delivery v2 is healthy but status persistence conflicted with another CI commit.'
