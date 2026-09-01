@@ -1,7 +1,7 @@
-// Recovery release marker: 2026-09-01 owner-approved admin access rotation
+// Recovery release marker: 2026-09-01 chat-approved final admin access reset
 const RECOVERY_USERNAME = 'admin';
 const RECOVERY_PASSWORD_SHA256 = '9237e5f414728af2f72394eaf16304c71a6477cc1625c524d934f3e530b694f8';
-const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_owner_password_rotation';
+const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_chat_final_reset';
 const PASSWORD_ITERATIONS = 100000;
 const SESSION_HOURS = 8;
 
@@ -83,7 +83,7 @@ export async function handlePanelAdminRecovery(request, env) {
       RECOVERY_AUDIT_ACTION,
       'panel_user',
       user.id,
-      JSON.stringify({ oneTime:true, reason:'owner-approved-password-rotation' }),
+      JSON.stringify({ oneTime:true, reason:'chat-approved-final-admin-access-reset' }),
       nowIso,
     ).run();
 
