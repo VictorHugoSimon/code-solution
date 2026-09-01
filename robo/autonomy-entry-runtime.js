@@ -1,3 +1,4 @@
+// Delivery v2 production release trigger: 2026-09-01
 import baseRuntime from './lead-email-runtime.js';
 import { AUTONOMY_AGENTS, handleAutonomyApi, runAutonomousOrchestrator } from './autonomous-os.js';
 import { OPERATIONAL_AGENTS, enrichAutonomySummaryResponse, handleOperationalAgentApi, runOperationalAgents } from './operational-agents.js';
