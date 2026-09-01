@@ -1,7 +1,7 @@
-// Recovery release marker: 2026-09-01 chat-approved final admin access reset
+// Recovery release marker: 2026-09-01 final owner CRM credential reset v2
 const RECOVERY_USERNAME = 'admin';
-const RECOVERY_PASSWORD_SHA256 = '9237e5f414728af2f72394eaf16304c71a6477cc1625c524d934f3e530b694f8';
-const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_chat_final_reset';
+const RECOVERY_PASSWORD_SHA256 = '51ac1d3b1b6e53fda8569944deadd68a270caa23b906a68abc61216300d776e3';
+const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_final_v2';
 const PASSWORD_ITERATIONS = 100000;
 const SESSION_HOURS = 8;
 
@@ -83,7 +83,7 @@ export async function handlePanelAdminRecovery(request, env) {
       RECOVERY_AUDIT_ACTION,
       'panel_user',
       user.id,
-      JSON.stringify({ oneTime:true, reason:'chat-approved-final-admin-access-reset' }),
+      JSON.stringify({ oneTime:true, reason:'final-owner-crm-credential-reset-v2' }),
       nowIso,
     ).run();
 
