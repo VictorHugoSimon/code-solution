@@ -8,14 +8,15 @@ if (!accountId || !apiToken) throw new Error('Cloudflare credentials are require
 
 const articleSchema = {
   type: 'object',
+  additionalProperties: false,
   properties: {
-    title: { type: 'string' },
-    excerpt: { type: 'string' },
-    category: { type: 'string' },
-    readingTime: { type: 'string' },
-    metaDescription: { type: 'string' },
-    keywords: { type: 'array', items: { type: 'string' } },
-    body: { type: 'string' }
+    title: { type: 'string', minLength: 20, maxLength: 90 },
+    excerpt: { type: 'string', minLength: 120, maxLength: 240 },
+    category: { type: 'string', minLength: 3, maxLength: 80 },
+    readingTime: { type: 'string', minLength: 3, maxLength: 40 },
+    metaDescription: { type: 'string', minLength: 120, maxLength: 180 },
+    keywords: { type: 'array', minItems: 4, maxItems: 6, items: { type: 'string', minLength: 2, maxLength: 80 } },
+    body: { type: 'string', minLength: 2600 }
   },
   required: ['title', 'excerpt', 'category', 'readingTime', 'metaDescription', 'keywords', 'body']
 };
@@ -110,7 +111,7 @@ async function generatePt(t) {
 }
 
 async function translateLocale(source, language, locale) {
-  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Fill exactly the requested structured fields. Keep body as simple HTML. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
+  const prompt = `Translate the following Brazilian Portuguese B2B article into ${language}. Preserve the meaning, HTML tags, factual caution, CTA URL and structure. Do not add statistics, claims, clients or facts. Adapt idioms naturally. Fill exactly the requested structured fields. Keep body as simple HTML and preserve the source article depth; do not shorten it. Locale code: ${locale}.\n\nSOURCE JSON:\n${JSON.stringify(source)}`;
   return callAi(prompt, 5000);
 }
 
@@ -124,7 +125,7 @@ async function callAi(prompt, maxTokens) {
       headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [
-          { role: 'system', content: 'Return the requested structured article object only. Keep facts conservative and preserve HTML in body.' },
+          { role: 'system', content: 'Return the requested structured article object only. Keep facts conservative and preserve HTML in body. Meet every JSON Schema constraint.' },
           { role: 'user', content: prompt }
         ],
         response_format: { type: 'json_schema', json_schema: articleSchema },
@@ -259,7 +260,7 @@ function repairTemplateLiteralStrings(input) {
 
 function validateLocale(x, locale) {
   for (const k of ['title','excerpt','category','readingTime','metaDescription','body']) if (!String(x?.[k]||'').trim()) throw new Error(`${locale}: missing ${k}`);
-  if (!Array.isArray(x.keywords) || x.keywords.length < 3) throw new Error(`${locale}: invalid keywords`);
+  if (!Array.isArray(x.keywords) || x.keywords.length < 4) throw new Error(`${locale}: invalid keywords`);
   if (String(x.body).length < 2500) throw new Error(`${locale}: body too short`);
   if (!/<h2>/i.test(x.body) || !/<h3>/i.test(x.body)) throw new Error(`${locale}: headings missing`);
   if (/\bCodi\b/i.test(JSON.stringify(x))) throw new Error(`${locale}: legacy branding found`);
