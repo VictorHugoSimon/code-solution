@@ -1,6 +1,7 @@
 import baseRuntime from './lead-email-runtime.js';
 import { AUTONOMY_AGENTS, handleAutonomyApi, runAutonomousOrchestrator } from './autonomous-os.js';
 import { OPERATIONAL_AGENTS, enrichAutonomySummaryResponse, handleOperationalAgentApi, runOperationalAgents } from './operational-agents.js';
+import { DELIVERY_AGENT_V2, handleDeliveryAgentV2Api, runDeliveryAgentV2 } from './delivery-agent-v2.js';
 import { handleAutonomyTelemetryApi } from './autonomy-telemetry.js';
 import {
   AUTONOMY_POLICY_VERSION,
@@ -12,7 +13,7 @@ import {
   runAutonomyMaintenance,
 } from './autonomy-resilience.js';
 
-const AUTONOMY_BUILD = 'autonomous-os-2026-08-28.2';
+const AUTONOMY_BUILD = 'autonomous-os-2026-09-01.delivery-v2';
 
 export default {
   async fetch(request, env, ctx) {
@@ -29,9 +30,10 @@ export default {
         policyVersion: AUTONOMY_POLICY_VERSION,
         globalAutonomyEnabled: resilience.globalEnabled,
         resilience,
-        agents: [...new Set([...core, ...operational, RESILIENCE_AGENT.id])],
-        operationalAgents: operational,
+        agents: [...new Set([...core, ...operational, DELIVERY_AGENT_V2.id, RESILIENCE_AGENT.id])],
+        operationalAgents: [...new Set([...operational, DELIVERY_AGENT_V2.id])],
         governanceAgent: RESILIENCE_AGENT.id,
+        delivery: { version: 2, shadowFirst: true, externalActionsExecuted: false },
         approvalGates: ['external_message', 'content_publish', 'proposal_send', 'delivery_external_activation', 'discount', 'financial_commitment', 'destructive_change'],
       }), {
         status: 200,
@@ -45,6 +47,9 @@ export default {
     const resilienceApi = await handleResilienceApi(request, env);
     if (resilienceApi) return resilienceApi;
 
+    const deliveryApi = await handleDeliveryAgentV2Api(request, env);
+    if (deliveryApi) return deliveryApi;
+
     const operationalApi = await handleOperationalAgentApi(request, env);
     if (operationalApi) return operationalApi;
 
@@ -56,7 +61,8 @@ export default {
       if (!enabled) return json({ ok: true, disabled: true, reason: 'global_kill_switch', maintenance }, 200);
       const core = await runAutonomousOrchestrator(env, { trigger: 'manual' });
       const operational = await runOperationalAgents(env, { trigger: 'manual' });
-      return json({ ok: true, ...core, operational, maintenance, policyVersion: AUTONOMY_POLICY_VERSION }, 200);
+      const deliveryV2 = await runDeliveryAgentV2(env, { trigger: 'manual' });
+      return json({ ok: true, ...core, operational, deliveryV2, maintenance, policyVersion: AUTONOMY_POLICY_VERSION }, 200);
     }
 
     const autonomy = await handleAutonomyApi(request, env);
@@ -78,7 +84,11 @@ export default {
         if (!(await isGlobalAutonomyEnabled(env))) return;
         const results = await Promise.allSettled([
           runAutonomousOrchestrator(env, { trigger: 'scheduled_30m' }),
-          runOperationalAgents(env, { trigger: 'scheduled_30m' }),
+          (async () => {
+            const operational = await runOperationalAgents(env, { trigger: 'scheduled_30m' });
+            const deliveryV2 = await runDeliveryAgentV2(env, { trigger: 'scheduled_30m' });
+            return { operational, deliveryV2 };
+          })(),
         ]);
         for (const result of results) {
           if (result.status === 'rejected') console.error('Autonomous OS scheduled run failed', String(result.reason?.message || result.reason).slice(0, 500));
