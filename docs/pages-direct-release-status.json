@@ -1,13 +1,12 @@
 {
-  "checkedAt": "2026-09-02T18:20:02.628Z",
-  "sourceCommit": "6596b3df41f89dbc464f7f8ae562b8c6b519244b",
-  "build": "failure",
-  "crmAdminSecretSync": "skipped",
-  "pagesDeploy": "skipped",
-  "crmLoginSmoke": "skipped",
-  "crmBackendAuth": "skipped",
+  "checkedAt": "2026-09-02T18:23:08.262Z",
+  "sourceCommit": "a50639094a0bf0b337066e7c5bad8e97dd4f8308",
+  "build": "success",
+  "crmAdminSecretSync": "success",
+  "pagesDeploy": "success",
+  "crmLoginSmoke": "success",
+  "crmBackendAuth": "success",
   "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
-  "username": "admin",
-  "passwordStoredAs": "sha256-only",
+  "authModel": "backend-session-via-auth-login",
   "cloudflareAccountId": "cad25fe6c91871bbafb58236cf9b9b81"
 }
