@@ -1,9 +1,15 @@
-// Delivery v2 production release trigger: 2026-09-01
+// Autonomous OS hardening production release: 2026-09-02
 import baseRuntime from './lead-email-runtime.js';
 import { AUTONOMY_AGENTS, handleAutonomyApi, runAutonomousOrchestrator } from './autonomous-os.js';
 import { OPERATIONAL_AGENTS, enrichAutonomySummaryResponse, handleOperationalAgentApi, runOperationalAgents } from './operational-agents.js';
 import { DELIVERY_AGENT_V2, handleDeliveryAgentV2Api, runDeliveryAgentV2 } from './delivery-agent-v2.js';
 import { handleAutonomyTelemetryApi } from './autonomy-telemetry.js';
+import {
+  AUTONOMY_HARDENING_VERSION,
+  enrichHardeningSummaryResponse,
+  handleAutonomyHardeningApi,
+  runAutonomyHardeningPreflight,
+} from './autonomy-hardening.js';
 import {
   AUTONOMY_POLICY_VERSION,
   RESILIENCE_AGENT,
@@ -14,7 +20,7 @@ import {
   runAutonomyMaintenance,
 } from './autonomy-resilience.js';
 
-const AUTONOMY_BUILD = 'autonomous-os-2026-09-01.delivery-v2';
+const AUTONOMY_BUILD = 'autonomous-os-2026-09-02.hardening-v1';
 
 export default {
   async fetch(request, env, ctx) {
@@ -29,12 +35,14 @@ export default {
         build: AUTONOMY_BUILD,
         failMode: 'fail_closed',
         policyVersion: AUTONOMY_POLICY_VERSION,
+        hardeningVersion: AUTONOMY_HARDENING_VERSION,
         globalAutonomyEnabled: resilience.globalEnabled,
         resilience,
         agents: [...new Set([...core, ...operational, DELIVERY_AGENT_V2.id, RESILIENCE_AGENT.id])],
         operationalAgents: [...new Set([...operational, DELIVERY_AGENT_V2.id])],
         governanceAgent: RESILIENCE_AGENT.id,
         delivery: { version: 2, shadowFirst: true, externalActionsExecuted: false },
+        hardening: { queueBudgetEnforced: true, aiDailyBudget: true, safeReplay: true, recurringDedupe: true },
         approvalGates: ['external_message', 'content_publish', 'proposal_send', 'delivery_external_activation', 'discount', 'financial_commitment', 'destructive_change'],
       }), {
         status: 200,
@@ -44,6 +52,11 @@ export default {
 
     const telemetryApi = await handleAutonomyTelemetryApi(request, env);
     if (telemetryApi) return telemetryApi;
+
+    // Intercepts DLQ replay/requeue before the legacy resilience handler so
+    // every manual replay goes through the stricter hardening policy.
+    const hardeningApi = await handleAutonomyHardeningApi(request, env);
+    if (hardeningApi) return hardeningApi;
 
     const resilienceApi = await handleResilienceApi(request, env);
     if (resilienceApi) return resilienceApi;
@@ -57,20 +70,22 @@ export default {
     if (url.pathname === '/crm/autonomy/run' && request.method === 'POST') {
       if (!authorizeAdmin(request, env)) return json({ ok: false, error: 'unauthorized' }, 401);
       if (!env.CRM_DB) return json({ ok: false, error: 'autonomy_db_not_configured' }, 503);
+      const hardening = await runAutonomyHardeningPreflight(env, { trigger: 'manual_preflight' });
       const maintenance = await runAutonomyMaintenance(env, { trigger: 'manual_preflight' });
       const enabled = await isGlobalAutonomyEnabled(env);
-      if (!enabled) return json({ ok: true, disabled: true, reason: 'global_kill_switch', maintenance }, 200);
+      if (!enabled) return json({ ok: true, disabled: true, reason: 'global_kill_switch', hardening, maintenance }, 200);
       const core = await runAutonomousOrchestrator(env, { trigger: 'manual' });
       const operational = await runOperationalAgents(env, { trigger: 'manual' });
       const deliveryV2 = await runDeliveryAgentV2(env, { trigger: 'manual' });
-      return json({ ok: true, ...core, operational, deliveryV2, maintenance, policyVersion: AUTONOMY_POLICY_VERSION }, 200);
+      return json({ ok: true, ...core, operational, deliveryV2, hardening, maintenance, policyVersion: AUTONOMY_POLICY_VERSION, hardeningVersion: AUTONOMY_HARDENING_VERSION }, 200);
     }
 
     const autonomy = await handleAutonomyApi(request, env);
     if (autonomy) {
       if (url.pathname === '/crm/autonomy/summary' && request.method === 'GET') {
         const operationalSummary = await enrichAutonomySummaryResponse(autonomy, env);
-        return enrichResilienceSummaryResponse(operationalSummary, env);
+        const resilienceSummary = await enrichResilienceSummaryResponse(operationalSummary, env);
+        return enrichHardeningSummaryResponse(resilienceSummary, env);
       }
       return autonomy;
     }
@@ -81,6 +96,7 @@ export default {
     if (typeof baseRuntime.scheduled === 'function') await baseRuntime.scheduled(event, env, ctx);
     ctx.waitUntil((async () => {
       try {
+        await runAutonomyHardeningPreflight(env, { trigger: 'scheduled_30m_preflight' });
         await runAutonomyMaintenance(env, { trigger: 'scheduled_30m_preflight' });
         if (!(await isGlobalAutonomyEnabled(env))) return;
         const results = await Promise.allSettled([

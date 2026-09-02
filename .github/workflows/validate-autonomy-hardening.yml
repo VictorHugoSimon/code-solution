@@ -1,0 +1,44 @@
+name: Validate Autonomous OS hardening
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'robo/ai-client.js'
+      - 'robo/autonomy-hardening.js'
+      - 'robo/autonomy-entry-runtime.js'
+      - 'robo/autonomy-resilience.js'
+      - 'crm/migrations/0024_autonomy_hardening.sql'
+      - 'scripts/check-autonomy-hardening.mjs'
+      - '.github/workflows/validate-autonomy-hardening.yml'
+  pull_request:
+    paths:
+      - 'robo/ai-client.js'
+      - 'robo/autonomy-hardening.js'
+      - 'robo/autonomy-entry-runtime.js'
+      - 'robo/autonomy-resilience.js'
+      - 'crm/migrations/0024_autonomy_hardening.sql'
+      - 'scripts/check-autonomy-hardening.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax
+        run: |
+          node --check robo/ai-client.js
+          node --check robo/autonomy-hardening.js
+          node --check robo/autonomy-entry-runtime.js
+          node --check scripts/check-autonomy-hardening.mjs
+      - name: Full schema migration contract
+        run: python3 scripts/check-crm-schema.py
+      - name: Hardening policy contract
+        run: node scripts/check-autonomy-hardening.mjs
