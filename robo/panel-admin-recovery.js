@@ -1,7 +1,7 @@
-// Recovery release marker: 2026-09-01 final owner CRM credential reset v3
+// Recovery release marker: 2026-09-01 final owner CRM credential reset v4
 const RECOVERY_USERNAME = 'admin';
 const RECOVERY_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325';
-const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_final_v3';
+const RECOVERY_AUDIT_ACTION = 'admin_recovery_2026_09_01_final_v4';
 const PASSWORD_ITERATIONS = 100000;
 const SESSION_HOURS = 8;
 
@@ -83,7 +83,7 @@ export async function handlePanelAdminRecovery(request, env) {
       RECOVERY_AUDIT_ACTION,
       'panel_user',
       user.id,
-      JSON.stringify({ oneTime:true, reason:'final-owner-crm-credential-reset-v3' }),
+      JSON.stringify({ oneTime:true, reason:'final-owner-crm-credential-reset-v4' }),
       nowIso,
     ).run();
 
