@@ -32,10 +32,11 @@ jobs:
           node --check deploy/_worker.js
           test -f deploy/index.html
           test -f deploy/painel/crm/index.html
-          grep -q "LOGIN_USERNAME = 'admin'" deploy/_worker.js
-          grep -q "LOGIN_PASSWORD_SHA256 = 'c4467ec1a165ac8214bb31db4fffdc45e8ea0612e8e2e696f2cc701de9a5a325'" deploy/_worker.js
-          grep -q "name=\"username\"" deploy/_worker.js
-          grep -q "name=\"password\"" deploy/_worker.js
+          grep -q '/auth/login' deploy/_worker.js
+          grep -q "form?.get('username')" deploy/_worker.js
+          grep -q "form?.get('password')" deploy/_worker.js
+          grep -q 'Acesso ao CRM' deploy/_worker.js
+          grep -q 'Entrar no CRM' deploy/_worker.js
 
       - name: Require personal Cloudflare account
         id: credentials
@@ -119,7 +120,7 @@ jobs:
             build:e.BUILD||'failure',crmAdminSecretSync:e.SECRET||'skipped',pagesDeploy:e.DEPLOY||'skipped',
             crmLoginSmoke:e.SMOKE||'skipped',crmBackendAuth:e.BACKEND||'skipped',
             crmLoginUrl:'https://www.codesolution.com.br/painel/login/',
-            username:'admin',passwordStoredAs:'sha256-only',cloudflareAccountId:'cad25fe6c91871bbafb58236cf9b9b81'
+            authModel:'backend-session-via-auth-login',cloudflareAccountId:'cad25fe6c91871bbafb58236cf9b9b81'
           },null,2)+'\n');
           NODE
           git config user.name "Code Solution Recovery Bot"
