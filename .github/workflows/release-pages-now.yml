@@ -2,8 +2,6 @@ name: Release Code Solution Pages now
 
 on:
   workflow_dispatch:
-  issues:
-    types: [opened, edited, reopened]
 
 permissions:
   contents: write
@@ -14,7 +12,6 @@ concurrency:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 17
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -68,7 +65,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --branch=main --commit-hash="$GITHUB_SHA" --commit-message="CRM access recovery $GITHUB_SHA"
+          npx wrangler@4 pages deploy deploy --project-name=codesolution-site --branch=main --commit-hash="$GITHUB_SHA" --commit-message="Manual CRM access recovery $GITHUB_SHA"
 
       - name: Validate live CRM access surface
         id: smoke
