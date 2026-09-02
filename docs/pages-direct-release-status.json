@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-09-02T18:19:49.925Z",
+  "sourceCommit": "679b43baf074a4fb42616dfe7a2c278e124d72c0",
+  "build": "failure",
+  "crmAdminSecretSync": "skipped",
+  "pagesDeploy": "skipped",
+  "crmLoginSmoke": "skipped",
+  "crmBackendAuth": "skipped",
+  "crmLoginUrl": "https://www.codesolution.com.br/painel/login/",
+  "username": "admin",
+  "passwordStoredAs": "sha256-only",
+  "cloudflareAccountId": "cad25fe6c91871bbafb58236cf9b9b81"
+}
