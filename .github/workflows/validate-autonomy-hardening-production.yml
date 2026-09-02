@@ -1,0 +1,66 @@
+name: Validate Autonomous OS hardening production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-autonomy-hardening-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate public hardening health
+        run: |
+          set -euo pipefail
+          ATTENDANT='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+          curl -fsS --retry 5 --retry-delay 3 "$ATTENDANT/autonomy/health" > /tmp/health.json
+          node - <<'NODE'
+          const h=require('/tmp/health.json');
+          if(h.ok!==true) throw new Error('autonomy health not ok');
+          if(h.build!=='autonomous-os-2026-09-02.hardening-v1') throw new Error(`unexpected build ${h.build}`);
+          if(h.hardeningVersion!=='autonomy-hardening-2026-09-02.1') throw new Error(`unexpected hardening ${h.hardeningVersion}`);
+          for(const key of ['queueBudgetEnforced','aiDailyBudget','safeReplay','recurringDedupe']) if(h.hardening?.[key]!==true) throw new Error(`hardening flag false: ${key}`);
+          if(h.failMode!=='fail_closed') throw new Error('autonomy not fail_closed');
+          NODE
+
+      - name: Validate authenticated hardening API and migration tables
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CRM_ADMIN_KEY"
+          ATTENDANT='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+          http=$(curl -sS --retry 5 --retry-delay 3 -o /tmp/hardening.json -w '%{http_code}' "$ATTENDANT/crm/autonomy/hardening" -H "x-crm-key: $CRM_ADMIN_KEY")
+          test "$http" = 200
+          node - <<'NODE'
+          const x=require('/tmp/hardening.json');
+          if(x.ok!==true) throw new Error('hardening API not ok');
+          if(x.version!=='autonomy-hardening-2026-09-02.1') throw new Error(`unexpected hardening API version ${x.version}`);
+          if(x.queueBudgetEnforced!==true) throw new Error('queue budget not enforced');
+          if(x.aiBudgetPolicy?.accounting!=='reserved_output_tokens') throw new Error('AI budget accounting missing');
+          if(x.aiBudgetPolicy?.resetTimeZone!=='America/Sao_Paulo') throw new Error('AI budget timezone missing');
+          if(!Array.isArray(x.safeReplayActions) || x.safeReplayActions.includes('external_outreach')) throw new Error('safe replay allowlist invalid');
+          if(!Array.isArray(x.aiUsageToday)) throw new Error('AI usage table unavailable');
+          if(!Array.isArray(x.recentReplayAudit)) throw new Error('replay audit table unavailable');
+          NODE
+
+      - name: Validate enriched autonomy summary
+        env:
+          CRM_ADMIN_KEY: ${{ secrets.CRM_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          ATTENDANT='https://code-solution-atendente.victorhugoteixeirasimon6.workers.dev'
+          curl -fsS "$ATTENDANT/crm/autonomy/summary" -H "x-crm-key: $CRM_ADMIN_KEY" > /tmp/summary.json
+          node - <<'NODE'
+          const x=require('/tmp/summary.json');
+          if(x.ok!==true) throw new Error('autonomy summary not ok');
+          if(x.policy?.hardeningVersion!=='autonomy-hardening-2026-09-02.1') throw new Error('summary hardening version missing');
+          if(x.policy?.queueBudgetEnforced!==true || x.policy?.aiDailyBudget!==true) throw new Error('summary hardening policy flags missing');
+          if(x.hardening?.version!=='autonomy-hardening-2026-09-02.1') throw new Error('summary hardening block missing');
+          NODE
