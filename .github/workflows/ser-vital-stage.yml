@@ -1,0 +1,154 @@
+name: Ser Vital — Deploy STAGE
+
+on:
+  push:
+    branches:
+      - ser-vital-bootstrap
+    paths:
+      - 'ser-vital/**'
+      - '.github/workflows/ser-vital-stage.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Cloudflare credentials
+        shell: bash
+        run: |
+          test -n "${CLOUDFLARE_API_TOKEN}" || (echo 'CLOUDFLARE_API_TOKEN ausente' && exit 1)
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || (echo 'CLOUDFLARE_ACCOUNT_ID ausente' && exit 1)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Create Pages project if needed
+        working-directory: ser-vital
+        continue-on-error: true
+        run: npx wrangler@4.124.0 pages project create ser-vital-stage --production-branch ser-vital-bootstrap
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Provision D1 STAGE
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_NAME="ser-vital-stage-db"
+          npx wrangler@4.124.0 d1 list --json > /tmp/d1.json
+          DB_ID=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/d1.json','utf8'));const x=j.find(v=>v.name==='ser-vital-stage-db');if(x)process.stdout.write(x.uuid||x.id||'')")
+          if [ -z "$DB_ID" ]; then
+            npx wrangler@4.124.0 d1 create "$DB_NAME" --location enam
+            npx wrangler@4.124.0 d1 list --json > /tmp/d1.json
+            DB_ID=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/d1.json','utf8'));const x=j.find(v=>v.name==='ser-vital-stage-db');if(x)process.stdout.write(x.uuid||x.id||'')")
+          fi
+          test -n "$DB_ID" || (echo 'Não foi possível resolver o ID do D1' && exit 1)
+          echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
+          echo "DB_ID=$DB_ID" >> "$GITHUB_ENV"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Apply D1 schema
+        working-directory: ser-vital
+        run: npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --file=schema.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Configure D1 binding for deployment
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          cat >> wrangler.toml <<EOF
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "${DB_NAME}"
+          database_id = "${DB_ID}"
+          EOF
+
+      - name: Configure admin secret when available
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          ADMIN_VALUE="${SER_VITAL_ADMIN_TOKEN:-${ADMIN_PASSWORD:-}}"
+          if [ -n "$ADMIN_VALUE" ]; then
+            printf '%s' "$ADMIN_VALUE" | npx wrangler@4.124.0 pages secret put ADMIN_TOKEN --project-name ser-vital-stage
+            echo 'ADMIN_TOKEN configurado.'
+          else
+            echo 'Nenhum secret administrativo encontrado; /admin seguirá bloqueado até configuração.'
+          fi
+        env:
+          SER_VITAL_ADMIN_TOKEN: ${{ secrets.SER_VITAL_ADMIN_TOKEN }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Configure Asaas Sandbox secrets when available
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          if [ -n "${ASAAS_SANDBOX_API_KEY}" ]; then
+            printf '%s' "$ASAAS_SANDBOX_API_KEY" | npx wrangler@4.124.0 pages secret put ASAAS_API_KEY --project-name ser-vital-stage
+            echo 'ASAAS_API_KEY de sandbox configurada.'
+          else
+            echo 'ASAAS_SANDBOX_API_KEY ausente; checkout seguirá em fallback seguro para WhatsApp.'
+          fi
+          if [ -n "${ASAAS_WEBHOOK_TOKEN}" ]; then
+            printf '%s' "$ASAAS_WEBHOOK_TOKEN" | npx wrangler@4.124.0 pages secret put ASAAS_WEBHOOK_TOKEN --project-name ser-vital-stage
+            echo 'ASAAS_WEBHOOK_TOKEN configurado.'
+          else
+            echo 'ASAAS_WEBHOOK_TOKEN ausente; webhook Asaas seguirá bloqueado.'
+          fi
+        env:
+          ASAAS_SANDBOX_API_KEY: ${{ secrets.ASAAS_SANDBOX_API_KEY }}
+          ASAAS_WEBHOOK_TOKEN: ${{ secrets.ASAAS_WEBHOOK_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy STAGE
+        working-directory: ser-vital
+        run: npx wrangler@4.124.0 pages deploy public --project-name ser-vital-stage --branch stage --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Smoke test lead → CRM DB → agenda
+        working-directory: ser-vital
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://stage.ser-vital-stage.pages.dev"
+          echo 'Health:'
+          HEALTH=$(curl --retry 8 --retry-all-errors --retry-delay 2 -fsS "$BASE_URL/api/health")
+          echo "$HEALTH"
+          echo "$HEALTH" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok||j.database!=='ok')process.exit(1)})"
+
+          AVAIL=$(curl --retry 5 --retry-all-errors --retry-delay 2 -fsS "$BASE_URL/api/availability")
+          SLOT=$(printf '%s' "$AVAIL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.slots?.length)process.exit(1);process.stdout.write(j.slots[0])})")
+
+          PHONE="smoke-${GITHUB_RUN_ID}"
+          LEAD=$(curl -fsS -X POST "$BASE_URL/api/leads" -H 'content-type: application/json' --data "{\"name\":\"Smoke Test Ser Vital\",\"phone\":\"$PHONE\",\"email\":\"smoke@example.invalid\",\"interest\":\"Reiki\",\"message\":\"Teste automatizado de deploy\",\"consent\":true,\"utm_source\":\"github-actions\",\"utm_medium\":\"smoke-test\",\"utm_campaign\":\"stage-deploy\",\"landing_page\":\"/smoke\"}")
+          LEAD_ID=$(printf '%s' "$LEAD" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok||!j.id)process.exit(1);process.stdout.write(j.id)})")
+
+          BOOK=$(curl -fsS -X POST "$BASE_URL/api/availability" -H 'content-type: application/json' --data "{\"lead_id\":\"$LEAD_ID\",\"scheduled_at\":\"$SLOT\"}")
+          printf '%s' "$BOOK" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.ok)process.exit(1)})"
+          echo "Smoke test OK: lead criado e horário reservado."
+
+          npx wrangler@4.124.0 d1 execute "$DB_NAME" --remote --command "DELETE FROM webhook_events WHERE id IN (SELECT id FROM webhook_events WHERE payload LIKE '%' || '$LEAD_ID' || '%'); DELETE FROM payments WHERE lead_id='$LEAD_ID'; DELETE FROM events WHERE lead_id='$LEAD_ID'; DELETE FROM leads WHERE id='$LEAD_ID';"
+          echo 'Dados sintéticos removidos.'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
